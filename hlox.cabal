@@ -81,6 +81,7 @@ library
     import:           shared-properties
 
     exposed-modules: Lexer
+                     , Token
 
     -- Directories containing source files.
     hs-source-dirs:   lib
