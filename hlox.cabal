@@ -47,27 +47,53 @@ extra-doc-files:    CHANGELOG.md
 -- Extra source files to be distributed with the package, such as examples, or a tutorial module.
 -- extra-source-files:
 
-common warnings
-    ghc-options: -Wall
+
+common shared-properties
+  default-language: Haskell2010
+  build-depends: base ^>=4.17.2.1
+  ghc-options:
+    -Wall
 
 executable hlox
     -- Import common warning flags.
-    import:           warnings
+    import:           shared-properties
 
     -- .hs or .lhs file containing the Main module.
     main-is:          Main.hs
 
-    -- Modules included in this executable, other than Main.
-    -- other-modules:
+    -- -- Modules included in this executable, other than Main.
+    -- other-modules: Lexer
+
+    -- exposed-modules: Lexer
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.1
+    build-depends:  hlox
 
     -- Directories containing source files.
     hs-source-dirs:   app
 
-    -- Base language which the package is written in.
-    default-language: Haskell2010
+
+library
+    -- Import common warning flags.
+    import:           shared-properties
+
+    exposed-modules: Lexer
+
+    -- Directories containing source files.
+    hs-source-dirs:   lib
+
+test-suite spec
+    import: shared-properties
+    type: exitcode-stdio-1.0
+    other-modules: LexerSpec
+                   , AnotherSpec
+                   , SpecHelper
+    hs-source-dirs: spec
+    main-is: Spec.hs
+    build-depends: hspec >= 2.7
+                    , hspec-discover >= 2.7
+                    , hlox
+    default-language:    Haskell2010
