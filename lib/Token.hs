@@ -41,12 +41,12 @@ data Token = LeftParen
   | Less
   | LessEqual
   | Identifier String
-  | StringT String
-  | NumberT Double
+  | StringToken String
+  | NumberToken Double
   | And
   | Class
   | Else
-  | False
+  | FalseToken
   | Fun
   | For
   | If
@@ -56,15 +56,15 @@ data Token = LeftParen
   | Return
   | Super
   | This
-  | True
+  | TrueToken
   | Var
   | While
   | EOF
   deriving (Show, Eq)
 
 data TokenWithContext = TokenWithContext {
-                          token :: Token,
-                          line :: Int,
-                          column :: Int
+                          tcToken :: Token,
+                          tcLine :: Int,
+                          tcColumn :: Int
                         }
             deriving (Show, Eq) 
