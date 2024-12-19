@@ -83,6 +83,7 @@ library
 
     exposed-modules: Lexer
                      , Token
+                     , Ast
 
     -- Directories containing source files.
     hs-source-dirs:   lib
@@ -91,7 +92,7 @@ test-suite spec
     import: shared-properties
     type: exitcode-stdio-1.0
     other-modules: LexerSpec
-                   , AnotherSpec
+                   , ParserSpec
                    , SpecHelper
     hs-source-dirs: spec
     main-is: Spec.hs
