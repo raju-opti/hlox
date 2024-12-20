@@ -1,11 +1,18 @@
 {-# OPTIONS_GHC -Wno-noncanonical-monad-instances #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE InstanceSigs #-}
 module Ast where
 import Token
 import Control.Monad
 import Data.Maybe
 import Control.Applicative -- Otherwise you can't do the Applicative instance.
 import Control.Monad (liftM, ap)
+import GHC.Conc (par)
+import Data.Char (isNumber)
+import Debug.Trace 
+
+debug :: c -> String -> c
+debug = flip trace
 
 data Expression =
   Binary Expression TokenWithContext Expression
@@ -35,6 +42,7 @@ instance Applicative Parser where
 
 
 instance Monad Parser where
+  return :: a -> Parser a
   return a = Parser (Right a,)
 
   (>>=) parser f = Parser $ \tokens ->
@@ -57,51 +65,95 @@ instance MonadPlus Parser where
       Right _ -> result
       Left _ -> case runParse p2 tokens of
         result'@(Right _, _) -> result'
-        _ -> (Left $ noMatch tokens "Failed to parse", tokens)
+        _ -> (Left $ noMatch tokens "Faaailed to parse", tokens)
 
 
-parseExpression :: ParseFn Expression
-parseExpression = parseEquality
+expressionParser :: Parser Expression
+expressionParser = equalityParser
 
-parseEquality :: ParseFn Expression
-parseEquality = parseComparison
+repeatParser' :: Parser a -> Parser [a]
+repeatParser' parser = let repeatParse = do
+                            a <- parser
+                            as <- repeatParse <|> return []
+                            return (a:as)
+                        in repeatParse
 
-parseComparison :: ParseFn Expression
-parseComparison = parseTerm
+repeatParser :: Parser a -> Parser [a]
+repeatParser parser = repeatParser' parser <|> return []
 
-parseTerm :: ParseFn Expression
-parseTerm = parseFactor
+leftAssociativeParser :: Parser Expression -> Parser TokenWithContext -> Parser Expression
+leftAssociativeParser expParser operatorParser = let subParser = repeatParser $ do
+                                                                    operator <- operatorParser
+                                                                    expression <- expParser
+                                                                    return (operator, expression)
+                                                in do
+                                                  expression <- expParser
+                                                  foldl (\acc (op, expr) -> Binary acc op expr) expression <$> subParser
 
-parseFactor :: ParseFn Expression
-parseFactor = parseUnary
+equalityParser :: Parser Expression
+equalityParser = leftAssociativeParser comparisonParser (tokenParser (== BangEqual) <|> tokenParser (== EqualEqual))
 
-parseUnary :: ParseFn Expression
-parseUnary = parsePrimary
+comparisonParser :: Parser Expression
+comparisonParser = leftAssociativeParser termParser (tokenParser (== Greater) <|> tokenParser (== GreaterEqual) <|> tokenParser (== Less) <|> tokenParser (== LessEqual))
+
+termParser :: Parser Expression
+termParser = leftAssociativeParser factorParser (tokenParser (== Minus) <|> tokenParser (== Plus))
+
+factorParser :: Parser Expression
+factorParser = leftAssociativeParser unaryParser (tokenParser (== Star) <|> tokenParser (== Slash))
+
+parseToken:: (Token -> Bool)-> ParseFn TokenWithContext
+parseToken fn (t:rest)
+  | fn (tcToken t) = (Right t, rest)
+parseToken _ input = (Left $ ParserError Nothing "Expected token", input)
+
+tokenParser :: (Token -> Bool) -> Parser TokenWithContext
+tokenParser = Parser . parseToken
+
+unaryParser :: Parser Expression
+unaryParser = let parser =
+                    let operatorParser = tokenParser (== Bang) <|> tokenParser (== Minus)
+                    in do
+                      operator <- operatorParser
+                      Unary operator <$> unaryParser
+              in parser <|> primaryParser
+
+isNumberToken :: Token -> Bool
+isNumberToken (NumberToken _) = True `debug` "isNumberToken"
+isNumberToken _ = False
+
+isStringToken :: Token -> Bool
+isStringToken (StringToken _) = True
+isStringToken _ = False
+
+isTrueToken :: Token -> Bool
+isTrueToken TrueToken = True
+isTrueToken _ = False
+
+isFalseToken :: Token -> Bool
+isFalseToken FalseToken = True
+isFalseToken _ = False
+
+isNilToken :: Token -> Bool
+isNilToken Nil = True
+isNilToken _ = False
+
+primaryParser :: Parser Expression
+primaryParser = literalParser <|> groupingParser <|> Parser (\input -> (Left $ ParserError (listToMaybe input) "Expected expression", input))
+                where
+                  literalParser = let parser =
+                                        tokenParser isNumberToken
+                                        <|> tokenParser isStringToken
+                                        <|> tokenParser isTrueToken
+                                        <|> tokenParser isFalseToken
+                                        <|> tokenParser isNilToken
+                                    in Literal <$> parser
+                  groupingParser = do
+                    tokenParser (== LeftParen)
+                    expr <- unaryParser
+                    tokenParser (== RightParen)
+                    return $ Grouping expr
 
 
-parseLeftParen :: ParseFn TokenWithContext
-parseLeftParen (token@(TokenWithContext LeftParen _ _):rest) = (Right token, rest)
-parseLeftParen input = (Left $ noMatch input "Expected '('", input)
-
-parseRightParen :: ParseFn TokenWithContext
-parseRightParen (token@(TokenWithContext RightParen _ _):rest) = (Right $ token, rest)
-parseRightParen input = (Left $ noMatch input "Expected ')'", input)
-
-parsePrimary :: ParseFn Expression
-parsePrimary [] = (Left $ ParserError Nothing "Unexpected EOF", [])
-parsePrimary input@(token:rest) =
-  case token of
-    TokenWithContext (NumberToken n) _ _ -> (Right $ Literal token, rest)
-    TokenWithContext (StringToken s) _ _ -> (Right $ Literal token, rest)
-    TokenWithContext TrueToken _ _ -> (Right $ Literal token, rest)
-    TokenWithContext FalseToken _ _ -> (Right $ Literal token, rest)
-    TokenWithContext Nil _ _ -> (Right $ Literal token, rest)
-    TokenWithContext LeftParen _ _ -> let parser = do
-                                            Parser parseLeftParen
-                                            e <- Parser parseExpression
-                                            Parser parseRightParen
-                                            return e
-                                        in case runParse parser input of
-                                            (Right expr, rest) -> (Right $ Grouping expr, rest)
-                                            (Left err, rest) -> (Left err, rest)
-    _ -> (Left $ ParserError (Just token) "Expected expression", input)
+parseExpression :: [TokenWithContext] -> (Either ParserError Expression, [TokenWithContext])
+parseExpression = runParse expressionParser
