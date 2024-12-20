@@ -84,6 +84,7 @@ library
     exposed-modules: Lexer
                      , Token
                      , Ast
+                     , Parser
 
     -- Directories containing source files.
     hs-source-dirs:   lib

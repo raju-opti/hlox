@@ -4,6 +4,7 @@ import SpecHelper
 import Token
 import Lexer
 import Ast
+import Parser
 import Data.Either 
 
 scanResult :: String -> [TokenWithContext]
