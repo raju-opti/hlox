@@ -8,8 +8,10 @@ import Data.Char (isDigit)
 import qualified Data.Foldable as F
 
 data LexError = LexError Int Int String
-  deriving (Show, Eq)
+  deriving (Eq)
 
+instance Show LexError where
+  show (LexError line column message) = "Syntax Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
 data LexState = LexState Int Int String
   deriving (Show, Eq)
 

@@ -6,11 +6,21 @@ data LoxValue = LoxNil
               | LoxBool Bool
               | LoxNumber Double
               | LoxString String
-              deriving (Show, Eq)
+              deriving (Eq)
+
+instance Show LoxValue where
+  show LoxNil = "nil"
+  show (LoxBool True) = "true"
+  show (LoxBool False) = "false"
+  show (LoxNumber n) = show n
+  show (LoxString s) = s
 
 data RuntimeError = RuntimeError (Maybe TokenWithContext) String
-  deriving (Show, Eq)
+  deriving (Eq)
 
+instance Show RuntimeError where
+  show (RuntimeError (Just (TokenWithContext _ line column)) message) = "Runtime Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
+  show (RuntimeError Nothing message) = "Runtime Error: " ++ message
 
 isTruthy :: LoxValue -> Bool
 isTruthy LoxNil = False

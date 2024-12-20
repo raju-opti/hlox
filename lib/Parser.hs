@@ -9,7 +9,11 @@ import Control.Applicative -- Otherwise you can't do the Applicative instance.
 import Ast
 
 data ParserError = ParserError (Maybe TokenWithContext) String
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show ParserError where
+  show (ParserError (Just (TokenWithContext _ line column)) message) = "Syntax Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
+  show (ParserError Nothing message) = "Syntax Error: " ++ message
 
 type ParseFn a = [TokenWithContext] -> (Either ParserError a, [TokenWithContext])
 
