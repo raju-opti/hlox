@@ -1,6 +1,7 @@
 module Interpreter where
 import Ast
 import Token
+import Control.Exception
 
 data LoxValue = LoxNil
               | LoxBool Bool
@@ -15,8 +16,12 @@ instance Show LoxValue where
   show (LoxNumber n) = show n
   show (LoxString s) = s
 
+
+
 data RuntimeError = RuntimeError (Maybe TokenWithContext) String
   deriving (Eq)
+
+instance Exception RuntimeError
 
 instance Show RuntimeError where
   show (RuntimeError (Just (TokenWithContext _ line column)) message) = "Runtime Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
@@ -87,3 +92,16 @@ evalExpression (Binary left token right) = do
 
 evalExpression (Grouping expr) = evalExpression expr
 evalExpression _ = Left $ RuntimeError Nothing "Failed to evaluate expression"
+
+evalStatement :: Statement -> IO ()
+evalStatement (ExpressionStatement expr) = do
+  let val = evalExpression expr
+  case val of
+    Right _ -> return ()
+    Left e -> throw e
+
+evalStatement (PrintStatement expr) = do
+  let val = evalExpression expr
+  case val of
+    Right v -> print v
+    Left e -> throw e

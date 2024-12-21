@@ -51,16 +51,38 @@ instance MonadPlus Parser where
   mzero = Parser $ \tokens -> (Left $ noMatch tokens "Failed to parse", tokens)
 
   mplus p1 p2 = Parser $ \tokens ->
-    let result@(value, _) = runParse p1 tokens
+    let result@(value, rest) = runParse p1 tokens
     in case value of
       Right _ -> result
-      Left _ -> case runParse p2 tokens of
-        result'@(Right _, _) -> result'
-        _ -> (Left $ noMatch tokens "Failed to parse", tokens)
+      Left _ 
+        | rest /= tokens -> result
+        | otherwise -> let result'@(value', rest') = runParse p2 tokens in
+          case value' of
+            Right _ -> result'
+            Left _ 
+              | rest' /= tokens -> result'
+              | otherwise -> (Left $ noMatch tokens "Failed to parse", tokens)
+
+
+  -- mplus p1 p2 = Parser $ \tokens ->
+  --   let result@(_, rest) = runParse p1 tokens
+  --   in if rest /= tokens
+  --     then result
+  --     else let result'@(_, rest') = runParse p2 tokens in
+  --       if rest' /= tokens
+  --         then result'
+  --         else (Left $ noMatch tokens "Failed to parse", tokens)
 
 
 expressionParser :: Parser Expression
 expressionParser = equalityParser
+
+noConsumptionOnFailure :: Parser a -> Parser a
+noConsumptionOnFailure parser = Parser $ \tokens ->
+  let (result, tokens') = runParse parser tokens
+  in case result of
+    Left _ -> (result, tokens)
+    Right _ -> (result, tokens')
 
 repeatParser' :: Parser a -> Parser [a]
 repeatParser' parser = let repeatParse = do
@@ -72,6 +94,7 @@ repeatParser' parser = let repeatParse = do
 repeatParser :: Parser a -> Parser [a]
 repeatParser parser = repeatParser' parser <|> return []
 
+
 leftAssociativeParser :: Parser Expression -> Parser TokenWithContext -> Parser Expression
 leftAssociativeParser expParser operatorParser = let subParser = repeatParser $ do
                                                                     operator <- operatorParser
@@ -79,6 +102,7 @@ leftAssociativeParser expParser operatorParser = let subParser = repeatParser $ 
                                                                     return (operator, expression)
                                                 in do
                                                   expression <- expParser
+                                                  return expression
                                                   foldl (\acc (op, expr) -> Binary acc op expr) expression <$> subParser
 
 equalityParser :: Parser Expression
@@ -98,8 +122,16 @@ parseToken fn (t:rest)
   | fn (tcToken t) = (Right t, rest)
 parseToken _ input = (Left $ ParserError Nothing "Expected token", input)
 
+parseToken':: (Token -> Bool)-> String -> ParseFn TokenWithContext
+parseToken' fn _ (t:rest)
+  | fn (tcToken t) = (Right t, rest)
+parseToken' _ msg input = (Left $ ParserError Nothing msg, input)
+
 tokenParser :: (Token -> Bool) -> Parser TokenWithContext
 tokenParser = Parser . parseToken
+
+tokenParser' :: (Token -> Bool) -> String -> Parser TokenWithContext
+tokenParser' fn = Parser . parseToken' fn
 
 unaryParser :: Parser Expression
 unaryParser = let parser =
@@ -148,3 +180,28 @@ primaryParser = literalParser <|> groupingParser <|> Parser (\input -> (Left $ P
 
 parseExpression :: [TokenWithContext] -> (Either ParserError Expression, [TokenWithContext])
 parseExpression = runParse expressionParser
+
+parseProgram :: [TokenWithContext] -> Either ParserError [Statement]
+parseProgram = fst . runParse programParser
+
+programParser :: Parser [Statement]
+programParser = do
+  statements <- repeatParser statementParser
+  tokenParser (== EOF)
+  return statements
+
+statementParser :: Parser Statement
+statementParser = expressionStatementParser <|> printStatementParser
+
+expressionStatementParser :: Parser Statement
+expressionStatementParser = do
+  expression <- expressionParser
+  tokenParser' (== Semicolon) "Expect ';' after value."
+  return $ ExpressionStatement expression
+
+printStatementParser :: Parser Statement
+printStatementParser = do
+  tokenParser (== Print)
+  expression <- expressionParser
+  tokenParser' (== Semicolon) "Expect ';' after value."
+  return $ PrintStatement expression

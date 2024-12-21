@@ -6,3 +6,8 @@ data Expression =
   | Literal TokenWithContext
   | Grouping Expression
   deriving (Show, Eq)
+
+data Statement =
+  ExpressionStatement Expression
+  | PrintStatement Expression
+  deriving (Show, Eq)

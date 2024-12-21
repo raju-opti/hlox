@@ -1,11 +1,13 @@
 module Lexer(
   scan,
+  scan',
   LexError(..)
 ) where
 import Token
 import Data.Map as Map
 import Data.Char (isDigit)
 import qualified Data.Foldable as F
+import Data.Either
 
 data LexError = LexError Int Int String
   deriving (Eq)
@@ -207,4 +209,9 @@ doScan state@(LexState line column (c:cs)) =
           in scanForTokens newState tokenWithContext
 
 scan:: String -> Either [LexError] [TokenWithContext]
-scan input = doScan (LexState 1 1 input)
+scan input = doScan (LexState 1 1 input) 
+
+scan':: String -> Either [LexError] [TokenWithContext]
+scan' input = do
+  tokens <- scan input
+  return $ tokens ++ [TokenWithContext EOF (length input) 1]

@@ -2,7 +2,7 @@ module Main where
 import System.Environment
 import System.IO
 import Token
-import Lexer
+import Lexer 
 import Parser
 import Interpreter
 import Data.Either
@@ -16,9 +16,15 @@ scanAndParseExpression inp = do
   let (result, _) = parseExpression tokens
   first show result
 
+scanAndParseStatements :: String -> Either String [Statement]
+scanAndParseStatements inp = do
+  tokens <- (first (unlines. fmap show) . scan') inp
+  let result = parseProgram tokens
+  first show result
 
-repl:: IO ()
-repl = do
+
+repl':: IO ()
+repl' = do
   putStr "λ> "
   line <- getLine
   let result = scanAndParseExpression line
@@ -27,6 +33,17 @@ repl = do
     Right expr -> case evalExpression expr of
       Left err -> print err
       Right value -> print value
+  repl'
+
+repl:: IO ()
+repl = do
+  putStr "λ> "
+  line <- getLine
+  let result = scanAndParseStatements line
+  case result of
+    Left err -> putStrLn err
+    Right statements -> do
+      mapM_ evalStatement statements
   repl
 
 runScript:: String -> IO ()
