@@ -26,3 +26,4 @@ spec = describe "Parser" $ do
     parseDeclaration (scanResult "var x = 1;") `shouldBe` (Right $ Declaration (TokenWithContext (Identifier "x") 1 5) (Just (Literal (TokenWithContext (NumberToken 1) 1 9))), [])
     parseDeclaration (scanResult "var x;") `shouldBe` (Right $ Declaration (TokenWithContext (Identifier "x") 1 5) Nothing, [])
     parseDeclaration (scanResult "var x = ;") `shouldBe` (Left $ ParserError (Just (TokenWithContext Semicolon 1 9)) "Expected expression", [TokenWithContext Semicolon 1 9])
+    parseDeclaration (scanResult "var 1") `shouldBe` (Left $ ParserError (Just (TokenWithContext (NumberToken 1) 1 5)) "expect variable name", [TokenWithContext (NumberToken 1) 1 5])

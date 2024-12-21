@@ -7,6 +7,7 @@ import Control.Monad
 import Data.Maybe
 import Control.Applicative -- Otherwise you can't do the Applicative instance.
 import Ast
+import Text.ParserCombinators.ReadPrec (reset)
 
 data ParserError = ParserError (Maybe TokenWithContext) String
   deriving (Eq)
@@ -133,6 +134,7 @@ parseToken _ input = (Left $ ParserError Nothing "Expected token", input)
 parseToken':: (Token -> Bool)-> String -> ParseFn TokenWithContext
 parseToken' fn _ (t:rest)
   | fn (tcToken t) = (Right t, rest)
+parseToken' _ msg input@(t:_) = (Left $ ParserError (Just t) msg, input)
 parseToken' _ msg input = (Left $ ParserError Nothing msg, input)
 
 tokenParser :: (Token -> Bool) -> Parser TokenWithContext
@@ -206,7 +208,7 @@ isIdentifier _ = False
 declarationParser :: Parser Statement
 declarationParser = statementParser <|> do
   tokenParser (== Var)
-  identifier <- tokenParser isIdentifier
+  identifier <- tokenParser' isIdentifier "expect variable name"
   expression <- optional $ do
     tokenParser (== Equal)
     expressionParser
