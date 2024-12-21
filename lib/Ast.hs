@@ -5,9 +5,11 @@ data Expression =
   | Unary TokenWithContext Expression
   | Literal TokenWithContext
   | Grouping Expression
+  | IdentifierExpr TokenWithContext
   deriving (Show, Eq)
 
 data Statement =
   ExpressionStatement Expression
   | PrintStatement Expression
+  | Declaration TokenWithContext (Maybe Expression)
   deriving (Show, Eq)

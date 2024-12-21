@@ -50,18 +50,26 @@ instance Alternative Parser where
 instance MonadPlus Parser where
   mzero = Parser $ \tokens -> (Left $ noMatch tokens "Failed to parse", tokens)
 
+  -- mplus p1 p2 = Parser $ \tokens ->
+  --   let result@(value, rest) = runParse p1 tokens
+  --   in case value of
+  --     Right _ -> result
+  --     Left _ 
+  --       | rest /= tokens -> result
+  --       | otherwise -> let result'@(value', rest') = runParse p2 tokens in
+  --         case value' of
+  --           Right _ -> result'
+  --           Left _ 
+  --             | rest' /= tokens -> result'
+  --             | otherwise -> (Left $ noMatch tokens "Failed to parse", tokens)
+
   mplus p1 p2 = Parser $ \tokens ->
     let result@(value, rest) = runParse p1 tokens
     in case value of
       Right _ -> result
       Left _ 
         | rest /= tokens -> result
-        | otherwise -> let result'@(value', rest') = runParse p2 tokens in
-          case value' of
-            Right _ -> result'
-            Left _ 
-              | rest' /= tokens -> result'
-              | otherwise -> (Left $ noMatch tokens "Failed to parse", tokens)
+        | otherwise -> runParse p2 tokens
 
 
   -- mplus p1 p2 = Parser $ \tokens ->
@@ -186,9 +194,24 @@ parseProgram = fst . runParse programParser
 
 programParser :: Parser [Statement]
 programParser = do
-  statements <- repeatParser statementParser
+  statements <- repeatParser declarationParser
   tokenParser (== EOF)
   return statements
+
+isIdentifier :: Token -> Bool
+isIdentifier (Identifier _) = True
+isIdentifier _ = False
+
+
+declarationParser :: Parser Statement
+declarationParser = statementParser <|> do
+  tokenParser (== Var)
+  identifier <- tokenParser isIdentifier
+  expression <- optional $ do
+    tokenParser (== Equal)
+    expressionParser
+  tokenParser' (== Semicolon) "Expect ';' after variable declaration."
+  return $ Declaration identifier expression
 
 statementParser :: Parser Statement
 statementParser = expressionStatementParser <|> printStatementParser
