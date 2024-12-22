@@ -84,7 +84,19 @@ instance MonadPlus Parser where
 
 
 expressionParser :: Parser Expression
-expressionParser = equalityParser
+expressionParser = assignmentParser
+
+assignmentParser :: Parser Expression
+assignmentParser = do
+  expression <- equalityParser
+  eqSign <- optional $ tokenParser (== Equal)
+  case eqSign of
+    Just _ -> do
+      valueExpr <- assignmentParser
+      case expression of
+        IdentifierExpr identifier -> return $ Assignment identifier valueExpr
+        _ -> Parser (Left $ ParserError eqSign "Invalid assignment target",)
+    Nothing -> return expression
 
 noConsumptionOnFailure :: Parser a -> Parser a
 noConsumptionOnFailure parser = Parser $ \tokens ->
