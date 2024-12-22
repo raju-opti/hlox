@@ -78,6 +78,40 @@ binaryOp (TokenWithContext BangEqual _ _) l r = Right $ LoxBool (l /= r)
 
 binaryOp _ _ _ = Left $ RuntimeError Nothing "Failed to evaluate binary operation"
 
+
+type HashTable k v = H.BasicHashTable k v
+
+data Environment = Environment {
+  envParent :: Maybe Environment,
+  envValues :: IO (HashTable String LoxValue)
+}
+
+newEnvironment :: Maybe Environment -> Environment
+newEnvironment parent = Environment parent H.new
+
+getVar ::Environment -> String -> IO (Maybe LoxValue)
+getVar env name = do
+  values <- envValues env
+  val <- H.lookup values name
+  case val of
+    Just _ -> return val
+    Nothing -> case envParent env of
+      Just parent -> getVar parent name
+      Nothing -> return Nothing
+
+setVar :: Environment -> String -> LoxValue -> IO ()
+setVar env name value = do
+  values <- envValues env
+  H.insert values name value
+
+hasVar :: Environment -> String -> IO Bool
+hasVar env name = do
+  value <- getVar env name
+  case value of
+    Just _ -> return True
+    Nothing -> return False
+
+
 evalExpression :: Expression -> Either RuntimeError LoxValue
 evalExpression (Literal (TokenWithContext (NumberToken n) _ _)) = Right $ LoxNumber n
 evalExpression (Literal (TokenWithContext (StringToken s) _ _)) = Right $ LoxString s
