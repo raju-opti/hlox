@@ -2,6 +2,8 @@ module Interpreter where
 import Ast
 import Token
 import Control.Exception
+import qualified Data.HashTable.IO as H
+
 
 data LoxValue = LoxNil
               | LoxBool Bool
@@ -92,6 +94,7 @@ evalExpression (Binary left token right) = do
 
 evalExpression (Grouping expr) = evalExpression expr
 evalExpression _ = Left $ RuntimeError Nothing "Failed to evaluate expression"
+
 
 evalStatement :: Statement -> IO ()
 evalStatement (ExpressionStatement expr) = do

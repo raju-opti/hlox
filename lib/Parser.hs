@@ -171,8 +171,14 @@ isNilToken :: Token -> Bool
 isNilToken Nil = True
 isNilToken _ = False
 
+identifierName :: Token -> String
+identifierName (Identifier name) = name
+
 primaryParser :: Parser Expression
-primaryParser = literalParser <|> groupingParser <|> Parser (\input -> (Left $ ParserError (listToMaybe input) "Expected expression", input))
+primaryParser = literalParser 
+                <|> groupingParser
+                <|> identifierParser 
+                <|> Parser (\input -> (Left $ ParserError (listToMaybe input) "Expected expression", input))
                 where
                   literalParser = let parser =
                                         tokenParser isNumberToken
@@ -186,6 +192,8 @@ primaryParser = literalParser <|> groupingParser <|> Parser (\input -> (Left $ P
                     expr <- unaryParser
                     tokenParser (== RightParen)
                     return $ Grouping expr
+                  identifierParser = IdentifierExpr <$> tokenParser isIdentifier
+
 
 
 parseExpression :: [TokenWithContext] -> (Either ParserError Expression, [TokenWithContext])
