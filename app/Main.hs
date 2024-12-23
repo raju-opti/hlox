@@ -34,17 +34,17 @@ scanAndParseStatements inp = do
 --     Right statements -> do
 --       eval statements
 
-repl':: IO ()
-repl' = do
-  putStr "λ> "
-  line <- getLine
-  let result = scanAndParseExpression line
-  case result of
-    Left err -> putStrLn err
-    Right expr -> case evalExpression expr of
-      Left err -> print err
-      Right value -> print value
-  repl'
+-- repl':: IO ()
+-- repl' = do
+--   putStr "λ> "
+--   line <- getLine
+--   let result = scanAndParseExpression line
+--   case result of
+--     Left err -> putStrLn err
+--     Right expr -> case evalExpression expr of
+--       Left err -> print err
+--       Right value -> print value
+--   repl'
 
 repl:: IO ()
 repl = do

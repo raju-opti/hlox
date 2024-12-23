@@ -40,43 +40,43 @@ operandNotNumber token = RuntimeError (Just token) "Operand must be a number."
 bothOperandsNotNumber :: TokenWithContext -> RuntimeError
 bothOperandsNotNumber token = RuntimeError (Just token) "Operands must be numbers."
 
-unaryOp:: TokenWithContext -> LoxValue -> Either RuntimeError LoxValue
-unaryOp (TokenWithContext Minus _ _) (LoxNumber n) = Right $ LoxNumber (-n)
-unaryOp token@(TokenWithContext Minus _ _) _ = Left $ operandNotNumber token
-unaryOp (TokenWithContext Bang _ _) value =  Right $ LoxBool (not (isTruthy value))
-unaryOp _ _ = Left $ RuntimeError Nothing "Failed to evaluate unary operation"
+unaryOp:: TokenWithContext -> LoxValue -> IO LoxValue
+unaryOp (TokenWithContext Minus _ _) (LoxNumber n) = return $ LoxNumber (-n)
+unaryOp token@(TokenWithContext Minus _ _) _ = throw $ operandNotNumber token
+unaryOp (TokenWithContext Bang _ _) value =  return $ LoxBool (not (isTruthy value))
+unaryOp _ _ = throw $ RuntimeError Nothing "Failed to evaluate unary operation"
 
-binaryOp :: TokenWithContext -> LoxValue -> LoxValue -> Either RuntimeError LoxValue
-binaryOp (TokenWithContext Plus _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxNumber (l + r)
-binaryOp (TokenWithContext Plus _ _) (LoxString l) (LoxString r) = Right $ LoxString (l ++ r)
-binaryOp token@(TokenWithContext Plus _ _) _ _ = Left $ RuntimeError (Just token) "Operands must be two numbers or two strings."
+binaryOp :: TokenWithContext -> LoxValue -> LoxValue -> IO LoxValue
+binaryOp (TokenWithContext Plus _ _) (LoxNumber l) (LoxNumber r) = return $ LoxNumber (l + r)
+binaryOp (TokenWithContext Plus _ _) (LoxString l) (LoxString r) = return $ LoxString (l ++ r)
+binaryOp token@(TokenWithContext Plus _ _) _ _ = throw $ RuntimeError (Just token) "Operands must be two numbers or two strings."
 
-binaryOp (TokenWithContext Minus _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxNumber (l - r)
-binaryOp token@(TokenWithContext Minus _ _) _ _ = Left $ bothOperandsNotNumber token
+binaryOp (TokenWithContext Minus _ _) (LoxNumber l) (LoxNumber r) = return $ LoxNumber (l - r)
+binaryOp token@(TokenWithContext Minus _ _) _ _ = throw $ bothOperandsNotNumber token
 
-binaryOp (TokenWithContext Slash _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxNumber (l / r)
-binaryOp token@(TokenWithContext Slash _ _) _ _ = Left $ bothOperandsNotNumber token
+binaryOp (TokenWithContext Slash _ _) (LoxNumber l) (LoxNumber r) = return $ LoxNumber (l / r)
+binaryOp token@(TokenWithContext Slash _ _) _ _ = throw $ bothOperandsNotNumber token
 
-binaryOp (TokenWithContext Star _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxNumber (l * r)
-binaryOp token@(TokenWithContext Star _ _) _ _ = Left $ bothOperandsNotNumber token
+binaryOp (TokenWithContext Star _ _) (LoxNumber l) (LoxNumber r) = return $ LoxNumber (l * r)
+binaryOp token@(TokenWithContext Star _ _) _ _ = throw $ bothOperandsNotNumber token
 
-binaryOp (TokenWithContext Greater _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxBool (l > r)
-binaryOp token@(TokenWithContext Greater _ _) _ _ = Left $ bothOperandsNotNumber token
+binaryOp (TokenWithContext Greater _ _) (LoxNumber l) (LoxNumber r) = return $ LoxBool (l > r)
+binaryOp token@(TokenWithContext Greater _ _) _ _ = throw $ bothOperandsNotNumber token
 
-binaryOp (TokenWithContext GreaterEqual _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxBool (l >= r)
-binaryOp token@(TokenWithContext GreaterEqual _ _) _ _ = Left $ bothOperandsNotNumber token
+binaryOp (TokenWithContext GreaterEqual _ _) (LoxNumber l) (LoxNumber r) = return $ LoxBool (l >= r)
+binaryOp token@(TokenWithContext GreaterEqual _ _) _ _ = throw $ bothOperandsNotNumber token
 
-binaryOp (TokenWithContext Less _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxBool (l < r)
-binaryOp token@(TokenWithContext Less _ _) _ _ = Left $ bothOperandsNotNumber token
+binaryOp (TokenWithContext Less _ _) (LoxNumber l) (LoxNumber r) = return $ LoxBool (l < r)
+binaryOp token@(TokenWithContext Less _ _) _ _ = throw $ bothOperandsNotNumber token
 
-binaryOp (TokenWithContext LessEqual _ _) (LoxNumber l) (LoxNumber r) = Right $ LoxBool (l <= r)
-binaryOp token@(TokenWithContext LessEqual _ _) _ _ = Left $ bothOperandsNotNumber token
+binaryOp (TokenWithContext LessEqual _ _) (LoxNumber l) (LoxNumber r) = return $ LoxBool (l <= r)
+binaryOp token@(TokenWithContext LessEqual _ _) _ _ = throw $ bothOperandsNotNumber token
 
 -- FixMe: Haskell value comparison is not the same as Lox value comparison
-binaryOp (TokenWithContext EqualEqual _ _) l r = Right $ LoxBool (l == r)
-binaryOp (TokenWithContext BangEqual _ _) l r = Right $ LoxBool (l /= r)
+binaryOp (TokenWithContext EqualEqual _ _) l r = return $ LoxBool (l == r)
+binaryOp (TokenWithContext BangEqual _ _) l r = return $ LoxBool (l /= r)
 
-binaryOp _ _ _ = Left $ RuntimeError Nothing "Failed to evaluate binary operation"
+binaryOp _ _ _ = throw $ RuntimeError Nothing "Failed to evaluate binary operation"
 
 
 type HashTable k v = H.BasicHashTable k v
@@ -112,38 +112,35 @@ hasVar env name = do
     Nothing -> return False
 
 
-evalExpression :: Expression -> Either RuntimeError LoxValue
-evalExpression (Literal (TokenWithContext (NumberToken n) _ _)) = Right $ LoxNumber n
-evalExpression (Literal (TokenWithContext (StringToken s) _ _)) = Right $ LoxString s
-evalExpression (Literal (TokenWithContext TrueToken _ _)) = Right $ LoxBool True
-evalExpression (Literal (TokenWithContext FalseToken _ _)) = Right $ LoxBool False
-evalExpression (Literal (TokenWithContext Nil _ _)) = Right $ LoxNil
+evalExpression :: Environment -> Expression -> IO LoxValue
+evalExpression _ (Literal (TokenWithContext (NumberToken n) _ _)) = return $ LoxNumber n
+evalExpression _ (Literal (TokenWithContext (StringToken s) _ _)) = return $ LoxString s
+evalExpression _ (Literal (TokenWithContext TrueToken _ _)) = return $ LoxBool True
+evalExpression _ (Literal (TokenWithContext FalseToken _ _)) = return $ LoxBool False
+evalExpression _ (Literal (TokenWithContext Nil _ _)) = return LoxNil
 
-evalExpression (Unary token expr) = evalExpression expr >>= unaryOp token
+evalExpression env (Unary token expr) = evalExpression env expr >>= unaryOp token
 
-evalExpression (Binary left token right) = do
-  leftValue <- evalExpression left
-  rightValue <- evalExpression right
+evalExpression env (Binary left token right) = do
+  leftValue <- evalExpression env left
+  rightValue <- evalExpression env right
   binaryOp token leftValue rightValue
 
-evalExpression (Grouping expr) = evalExpression expr
-evalExpression _ = Left $ RuntimeError Nothing "Failed to evaluate expression"
+evalExpression env (Grouping expr) = evalExpression env expr
+evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
 
+globalEnv :: Environment
+globalEnv = newEnvironment Nothing
 
-evalStatement :: Statement -> IO ()
-evalStatement (ExpressionStatement expr) = do
-  let val = evalExpression expr
-  case val of
-    Right _ -> return ()
-    Left e -> throw e
+evalStatement :: Environment -> Statement -> IO ()
+evalStatement env (ExpressionStatement expr) = do
+  evalExpression env expr
+  return ()
 
-evalStatement (PrintStatement expr) = do
-  let val = evalExpression expr
-  case val of
-    Right v -> print v
-    Left e -> throw e
-
+evalStatement env (PrintStatement expr) = do
+  val <- evalExpression env expr
+  print val
 
 eval:: [Statement] -> IO ()
 eval statements = do
-  mapM_ evalStatement statements
+  mapM_ (evalStatement globalEnv) statements
