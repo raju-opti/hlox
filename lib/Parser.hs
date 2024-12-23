@@ -83,7 +83,7 @@ instance MonadPlus Parser where
   --         else (Left $ noMatch tokens "Failed to parse", tokens)
 
 expressionParser :: Parser Expression
-expressionParser = assignmentParser
+expressionParser = orParser
 
 assignmentParser :: Parser Expression
 assignmentParser = do
@@ -124,6 +124,12 @@ leftAssociativeParser expParser operatorParser = let subParser = repeatParser $ 
                                                   expression <- expParser
                                                   return expression
                                                   foldl (\acc (op, expr) -> Binary acc op expr) expression <$> subParser
+
+orParser :: Parser Expression
+orParser = leftAssociativeParser andParser (tokenParser (== Or))
+
+andParser :: Parser Expression
+andParser = leftAssociativeParser equalityParser (tokenParser (== And))
 
 equalityParser :: Parser Expression
 equalityParser = leftAssociativeParser comparisonParser (tokenParser (== BangEqual) <|> tokenParser (== EqualEqual))

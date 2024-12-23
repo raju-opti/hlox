@@ -134,6 +134,17 @@ evalExpression env (Assignment token@(TokenWithContext (Identifier name) _ _) ex
   value <- evalExpression env expr
   catch (assignVar env name value >> return value) (\(RuntimeError _ message) -> throw $ RuntimeError (Just token) message)
 
+evalExpression env (Binary left (TokenWithContext And _ _) right) = do
+  leftValue <- evalExpression env left
+  if isTruthy leftValue
+    then evalExpression env right
+    else return leftValue
+
+evalExpression env (Binary left (TokenWithContext Or _ _) right) = do
+  leftValue <- evalExpression env left
+  if isTruthy leftValue
+    then return leftValue
+    else evalExpression env right
 
 evalExpression env (Binary left token right) = do
   leftValue <- evalExpression env left
