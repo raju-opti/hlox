@@ -82,7 +82,6 @@ instance MonadPlus Parser where
   --         then result'
   --         else (Left $ noMatch tokens "Failed to parse", tokens)
 
-
 expressionParser :: Parser Expression
 expressionParser = assignmentParser
 

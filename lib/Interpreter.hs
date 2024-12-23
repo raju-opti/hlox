@@ -101,8 +101,17 @@ getVar env name = do
       Just parent -> getVar parent name
       Nothing -> return Nothing
 
-setVar :: Environment -> String -> LoxValue -> IO ()
-setVar env = H.insert (envValues env)
+defineVar :: Environment -> String -> LoxValue -> IO ()
+defineVar env = H.insert (envValues env)
+
+assignVar :: Environment -> String -> LoxValue -> IO ()
+assignVar env name value = do
+  hasVariable <- hasVar env name
+  if hasVariable
+    then H.insert (envValues env) name value
+    else case envParent env of
+      Just parent -> assignVar parent name value
+      Nothing -> throw $ RuntimeError Nothing ("Undefined variable '" ++ name ++ "'.")
 
 hasVar :: Environment -> String -> IO Bool
 hasVar env name = do
@@ -126,6 +135,13 @@ evalExpression env (IdentifierExpr token@(TokenWithContext (Identifier name) _ _
     Nothing -> throw $ RuntimeError (Just token) ("Undefined variable '" ++ name ++ "'.")
 evalExpression env (Unary token expr) = evalExpression env expr >>= unaryOp token
 
+evalExpression env (Assignment token@(TokenWithContext (Identifier name) _ _) expr) = do
+  value <- evalExpression env expr
+  hasVariable <- hasVar env name
+  if hasVariable
+    then assignVar env name value >> return value
+    else throw $ RuntimeError (Just token) ("Undefined variable '" ++ name ++ "'.")
+
 evalExpression env (Binary left token right) = do
   leftValue <- evalExpression env left
   rightValue <- evalExpression env right
@@ -148,8 +164,8 @@ evalStatement env (Declaration (TokenWithContext (Identifier name) _ _) val) = d
   case val of
     Just expr -> do
       value <- evalExpression env expr
-      setVar env name value
-    Nothing -> setVar env name LoxNil
+      defineVar env name value
+    Nothing -> defineVar env name LoxNil
   return ()
 
 evalStatement _ _ = throw $ RuntimeError Nothing "Failed to evaluate statement"
