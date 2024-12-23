@@ -2,8 +2,10 @@ module Interpreter where
 import Ast
 import Token
 import Control.Exception
+import Control.Monad (when)
 import qualified Data.HashTable.IO as H
 import Text.ParserCombinators.ReadP (get, look)
+import Data.HashTable.IO (new)
 
 
 data LoxValue = LoxNil
@@ -106,19 +108,12 @@ defineVar env = H.insert (envValues env)
 
 assignVar :: Environment -> String -> LoxValue -> IO ()
 assignVar env name value = do
-  hasVariable <- hasVar env name
-  if hasVariable
-    then H.insert (envValues env) name value
-    else case envParent env of
+  existingValue <- H.lookup (envValues env) name
+  case existingValue of
+    Just _ -> H.insert (envValues env) name value
+    Nothing -> case envParent env of
       Just parent -> assignVar parent name value
       Nothing -> throw $ RuntimeError Nothing ("Undefined variable '" ++ name ++ "'.")
-
-hasVar :: Environment -> String -> IO Bool
-hasVar env name = do
-  value <- getVar env name
-  case value of
-    Just _ -> return True
-    Nothing -> return False
 
 
 evalExpression :: Environment -> Expression -> IO LoxValue
@@ -137,10 +132,8 @@ evalExpression env (Unary token expr) = evalExpression env expr >>= unaryOp toke
 
 evalExpression env (Assignment token@(TokenWithContext (Identifier name) _ _) expr) = do
   value <- evalExpression env expr
-  hasVariable <- hasVar env name
-  if hasVariable
-    then assignVar env name value >> return value
-    else throw $ RuntimeError (Just token) ("Undefined variable '" ++ name ++ "'.")
+  catch (assignVar env name value >> return value) (\(RuntimeError _ message) -> throw $ RuntimeError (Just token) message)
+
 
 evalExpression env (Binary left token right) = do
   leftValue <- evalExpression env left
@@ -170,10 +163,22 @@ evalStatement env (Declaration (TokenWithContext (Identifier name) _ _) val) = d
 
 evalStatement env (Block statements) = do
   newEnv <- newEnvironment (Just env)
-  eval newEnv statements
+  mapM_ (evalStatement newEnv) statements
+
+
+evalStatement env (IfStatement condition thenBranch elseBranch) = do
+  conditionValue <- evalExpression env condition
+  if isTruthy conditionValue
+    then evalStatement env thenBranch
+    else mapM_ (evalStatement env) elseBranch
+
+
+evalStatement env stmt@(WhileStatement condition body) = do
+  conditionValue <- evalExpression env condition
+  when (isTruthy conditionValue) (evalStatement env body >> evalStatement env stmt)
 
 evalStatement _ _ = throw $ RuntimeError Nothing "Failed to evaluate statement"
-
+  
 eval:: Environment -> [Statement] -> IO ()
 eval env statements = do
   mapM_ (evalStatement env) statements

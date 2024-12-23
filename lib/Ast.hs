@@ -14,4 +14,6 @@ data Statement =
   | PrintStatement Expression
   | Declaration TokenWithContext (Maybe Expression)
   | Block [Statement]
+  | IfStatement Expression Statement (Maybe Statement)
+  | WhileStatement Expression Statement
   deriving (Show, Eq)

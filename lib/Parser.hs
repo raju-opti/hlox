@@ -68,7 +68,7 @@ instance MonadPlus Parser where
     let result@(value, rest) = runParse p1 tokens
     in case value of
       Right _ -> result
-      Left _ 
+      Left _
         | rest /= tokens -> result
         | otherwise -> runParse p2 tokens
 
@@ -186,9 +186,9 @@ identifierName :: Token -> String
 identifierName (Identifier name) = name
 
 primaryParser :: Parser Expression
-primaryParser = literalParser 
+primaryParser = literalParser
                 <|> groupingParser
-                <|> identifierParser 
+                <|> identifierParser
                 <|> Parser (\input -> (Left $ ParserError (listToMaybe input) "Expected expression", input))
                 where
                   literalParser = let parser =
@@ -234,8 +234,28 @@ declarationParser = statementParser <|> do
   tokenParser' (== Semicolon) "Expect ';' after variable declaration."
   return $ Declaration identifier expression
 
+ifStatementParser :: Parser Statement
+ifStatementParser = do
+  tokenParser (== If)
+  tokenParser' (== LeftParen) "Expect '(' after 'if'."
+  condition <- expressionParser
+  tokenParser' (== RightParen) "Expect ')' after if condition."
+  thenBranch <- statementParser
+  elseBranch <- optional $ do
+    tokenParser (== Else)
+    statementParser
+  return $ IfStatement condition thenBranch elseBranch
+
+whileStatementParser :: Parser Statement
+whileStatementParser = do
+  tokenParser (== While)
+  tokenParser' (== LeftParen) "Expect '(' after 'while'."
+  condition <- expressionParser
+  tokenParser' (== RightParen) "Expect ')' after while condition."
+  WhileStatement condition <$> statementParser
+
 statementParser :: Parser Statement
-statementParser = expressionStatementParser <|> printStatementParser <|> blockParser
+statementParser = expressionStatementParser <|> printStatementParser <|> blockParser <|> ifStatementParser <|> whileStatementParser
 
 expressionStatementParser :: Parser Statement
 expressionStatementParser = do
