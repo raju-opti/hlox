@@ -16,4 +16,5 @@ data Statement =
   | Block [Statement]
   | IfStatement Expression Statement (Maybe Statement)
   | WhileStatement Expression Statement
+  -- | ForStatement (Maybe Statement) (Maybe Expression) (Maybe Expression) Statement
   deriving (Show, Eq)

@@ -8,6 +8,7 @@ import Data.Maybe
 import Control.Applicative -- Otherwise you can't do the Applicative instance.
 import Ast
 import Text.ParserCombinators.ReadPrec (reset)
+import Data.Traversable (for)
 
 data ParserError = ParserError (Maybe TokenWithContext) String
   deriving (Eq)
@@ -83,7 +84,7 @@ instance MonadPlus Parser where
   --         else (Left $ noMatch tokens "Failed to parse", tokens)
 
 expressionParser :: Parser Expression
-expressionParser = orParser
+expressionParser = assignmentParser
 
 assignmentParser :: Parser Expression
 assignmentParser = do
@@ -260,8 +261,33 @@ whileStatementParser = do
   tokenParser' (== RightParen) "Expect ')' after while condition."
   WhileStatement condition <$> statementParser
 
+forStatementParser :: Parser Statement
+forStatementParser = do
+  tokenParser (== For)
+  tokenParser' (== LeftParen) "Expect '(' after 'for'."
+  initializer <- valueOrSemicolon declarationParser
+  condition <- optional expressionParser
+  tokenParser' (== Semicolon) "Expect ';' after loop condition."
+  increment <- optional expressionParser
+  tokenParser' (== RightParen) "Expect ')' after for clauses."
+  body <- statementParser
+  let body' = case increment of
+                Just expr -> Block [body, ExpressionStatement expr]
+                Nothing -> body
+      condition' = fromMaybe (Literal $ TokenWithContext TrueToken 0 0) condition
+      while = WhileStatement condition' body'
+  return $ case initializer of
+    Just stmt -> Block [stmt, while]
+    Nothing -> while
+    where valueOrSemicolon parser = (Just <$> parser) <|> (tokenParser (== Semicolon) >> return Nothing)
+
 statementParser :: Parser Statement
-statementParser = expressionStatementParser <|> printStatementParser <|> blockParser <|> ifStatementParser <|> whileStatementParser
+statementParser = expressionStatementParser 
+    <|> printStatementParser 
+    <|> blockParser 
+    <|> ifStatementParser
+    <|> whileStatementParser
+    <|> forStatementParser
 
 expressionStatementParser :: Parser Statement
 expressionStatementParser = do
