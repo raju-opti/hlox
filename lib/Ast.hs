@@ -7,6 +7,7 @@ data Expression =
   | Grouping Expression
   | IdentifierExpr TokenWithContext
   | Assignment TokenWithContext Expression
+  | Call Expression TokenWithContext [Expression]
   deriving (Show, Eq)
 
 data Statement =

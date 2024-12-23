@@ -36,4 +36,26 @@ spec = describe "Parser" $ do
 
   it "parses expression statement" $ do
     parseStatement (scanResult "1;") `shouldBe` (Right $ ExpressionStatement (Literal (TokenWithContext (NumberToken 1) 1 1)), [])
-    
+  
+  it "parses call expression" $ do
+    parseExpression (scanResult "foo(1, 2)") `shouldBe` 
+      (Right $ Call 
+        (IdentifierExpr (TokenWithContext (Identifier "foo") 1 1)) 
+        (TokenWithContext RightParen 1 9) 
+        [ Literal (TokenWithContext (NumberToken 1) 1 5)
+        , Literal (TokenWithContext (NumberToken 2) 1 8)
+        ], 
+      [])
+    parseExpression (scanResult "foo(1, 2)(3, 4)") `shouldBe` 
+      (Right $ Call 
+        (Call 
+          (IdentifierExpr (TokenWithContext (Identifier "foo") 1 1)) 
+          (TokenWithContext RightParen 1 9) 
+          [ Literal (TokenWithContext (NumberToken 1) 1 5)
+          , Literal (TokenWithContext (NumberToken 2) 1 8)
+          ]) 
+        (TokenWithContext RightParen 1 15) 
+        [ Literal (TokenWithContext (NumberToken 3) 1 11)
+        , Literal (TokenWithContext (NumberToken 4) 1 14)
+        ], 
+      [])

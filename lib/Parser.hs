@@ -167,7 +167,7 @@ unaryParser = let parser =
                     in do
                       operator <- operatorParser
                       Unary operator <$> unaryParser
-              in parser <|> primaryParser
+              in parser <|> callParser
 
 isNumberToken :: Token -> Bool
 isNumberToken (NumberToken _) = True
@@ -191,6 +191,28 @@ isNilToken _ = False
 
 identifierName :: Token -> String
 identifierName (Identifier name) = name
+
+atLeastOneParser :: Parser a -> Parser [a]
+atLeastOneParser parser = do
+  a <- parser
+  as <- repeatParser parser
+  return (a:as)
+
+argumentListParser :: Parser ([Expression], TokenWithContext)
+argumentListParser = do
+  tokenParser (== LeftParen)
+  expression <- expressionParser
+  expressions <- repeatParser $ do
+    tokenParser (== Comma)
+    expressionParser
+  closing <- tokenParser' (== RightParen) "Expect ')' after arguments."
+  return (expression:expressions, closing)
+
+callParser :: Parser Expression
+callParser = do
+      callee <- primaryParser
+      arguments <- repeatParser argumentListParser
+      return $ foldl (\acc (args, closing) -> Call acc closing args) callee arguments
 
 primaryParser :: Parser Expression
 primaryParser = literalParser
