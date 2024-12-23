@@ -6,10 +6,13 @@ import Lexer
 import Ast
 import Parser
 import Data.Either
-import GHC.Conc (par)
+
 
 scanResult :: String -> [TokenWithContext]
 scanResult = fromRight [] . scan
+
+parseStatement :: [TokenWithContext] -> (Either ParserError Statement, [TokenWithContext])
+parseStatement = runParse statementParser
 
 parseDeclaration :: [TokenWithContext] -> (Either ParserError Statement, [TokenWithContext])
 parseDeclaration = runParse declarationParser
@@ -30,3 +33,7 @@ spec = describe "Parser" $ do
  
   it "parses identifier expression" $ do
     parseExpression (scanResult "x") `shouldBe` (Right $ IdentifierExpr (TokenWithContext (Identifier "x") 1 1), [])
+
+  it "parses expression statement" $ do
+    parseStatement (scanResult "1;") `shouldBe` (Right $ ExpressionStatement (Literal (TokenWithContext (NumberToken 1) 1 1)), [])
+    

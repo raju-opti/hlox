@@ -204,14 +204,17 @@ doScan state@(LexState line column (c:cs)) =
      else case res of
         Nothing -> doScan newState
         Just (Left err) -> Left (scanForErrors newState err)
-        Just (Right token) -> 
+        Just (Right token) ->
           let tokenWithContext = TokenWithContext token line column
           in scanForTokens newState tokenWithContext
 
 scan:: String -> Either [LexError] [TokenWithContext]
-scan input = doScan (LexState 1 1 input) 
+scan input = doScan (LexState 1 1 input)
 
 scan':: String -> Either [LexError] [TokenWithContext]
 scan' input = do
-  tokens <- scan input
-  return $ tokens ++ [TokenWithContext EOF (length input) 1]
+  tokens <- scan input 
+  let l = lines input
+      lineCount = length l
+      lastLineLength = length (last l)
+  return $ tokens ++ [TokenWithContext EOF lineCount lastLineLength]
