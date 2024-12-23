@@ -9,6 +9,8 @@ import Data.Either
 import Data.Bifunctor
 import Ast
 import Data.Bifunctor (Bifunctor(bimap))
+import System.Exit (exitWith, ExitCode (ExitFailure))
+import Control.Exception
 
 scanAndParseExpression :: String -> Either String Expression
 scanAndParseExpression inp = do
@@ -22,6 +24,15 @@ scanAndParseStatements inp = do
   let result = parseProgram tokens
   first show result
 
+-- run:: String -> IO ()
+-- run input = do
+--   let result = scanAndParseStatements input
+--   case result of
+--     Left err -> do
+--       putStrLn err
+--       exitWith (ExitFailure 65)
+--     Right statements -> do
+--       eval statements
 
 repl':: IO ()
 repl' = do
@@ -43,12 +54,22 @@ repl = do
   case result of
     Left err -> putStrLn err
     Right statements -> do
-      mapM_ evalStatement statements
+      catch (eval statements) (print :: RuntimeError -> IO ())
   repl
+
 
 runScript:: String -> IO ()
 runScript file = do
-  putStrLn $ "Running script: " ++ file
+  contents <- readFile file
+  let result = scanAndParseStatements contents
+  case result of
+    Left err -> do
+      putStrLn err
+      exitWith (ExitFailure 65)
+    Right statements -> do
+      catch (eval statements) (\e -> do
+        print (e :: RuntimeError)
+        exitWith (ExitFailure 70))
 
 
 main :: IO ()

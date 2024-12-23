@@ -201,7 +201,7 @@ primaryParser = literalParser
                                     in Literal <$> parser
                   groupingParser = do
                     tokenParser (== LeftParen)
-                    expr <- unaryParser
+                    expr <- expressionParser
                     tokenParser (== RightParen)
                     return $ Grouping expr
                   identifierParser = IdentifierExpr <$> tokenParser isIdentifier

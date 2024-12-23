@@ -142,3 +142,8 @@ evalStatement (PrintStatement expr) = do
   case val of
     Right v -> print v
     Left e -> throw e
+
+
+eval:: [Statement] -> IO ()
+eval statements = do
+  mapM_ evalStatement statements
