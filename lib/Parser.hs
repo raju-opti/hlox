@@ -235,7 +235,7 @@ declarationParser = statementParser <|> do
   return $ Declaration identifier expression
 
 statementParser :: Parser Statement
-statementParser = expressionStatementParser <|> printStatementParser
+statementParser = expressionStatementParser <|> printStatementParser <|> blockParser
 
 expressionStatementParser :: Parser Statement
 expressionStatementParser = do
@@ -249,3 +249,10 @@ printStatementParser = do
   expression <- expressionParser
   tokenParser' (== Semicolon) "Expect ';' after value."
   return $ PrintStatement expression
+
+blockParser :: Parser Statement
+blockParser = do
+  tokenParser (== LeftBrace)
+  statements <- repeatParser declarationParser
+  tokenParser' (== RightBrace) "Expect '}' after block."
+  return $ Block statements

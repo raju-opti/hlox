@@ -168,9 +168,12 @@ evalStatement env (Declaration (TokenWithContext (Identifier name) _ _) val) = d
     Nothing -> defineVar env name LoxNil
   return ()
 
+evalStatement env (Block statements) = do
+  newEnv <- newEnvironment (Just env)
+  eval newEnv statements
+
 evalStatement _ _ = throw $ RuntimeError Nothing "Failed to evaluate statement"
 
 eval:: Environment -> [Statement] -> IO ()
 eval env statements = do
   mapM_ (evalStatement env) statements
-

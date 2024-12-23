@@ -13,4 +13,5 @@ data Statement =
   ExpressionStatement Expression
   | PrintStatement Expression
   | Declaration TokenWithContext (Maybe Expression)
+  | Block [Statement]
   deriving (Show, Eq)
