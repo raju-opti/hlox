@@ -46,16 +46,31 @@ scanAndParseStatements inp = do
 --       Right value -> print value
 --   repl'
 
-repl:: IO ()
-repl = do
+replEnv :: Environment -> IO ()
+replEnv env = do
   putStr "λ> "
   line <- getLine
   let result = scanAndParseStatements line
   case result of
     Left err -> putStrLn err
     Right statements -> do
-      catch (eval statements) (print :: RuntimeError -> IO ())
-  repl
+      catch (eval env statements) (print :: RuntimeError -> IO ())
+  replEnv env
+
+repl:: IO ()
+repl = do
+  env <- newEnvironment Nothing
+  replEnv env
+  -- putStr "λ> "
+  -- line <- getLine
+  -- let result = scanAndParseStatements line
+  -- case result of
+  --   Left err -> putStrLn err
+  --   Right statements -> do
+  --     foo <- getVar env "foo"
+  --     print foo
+  --     catch (eval env statements) (print :: RuntimeError -> IO ())
+  -- repl
 
 
 runScript:: String -> IO ()
@@ -67,7 +82,8 @@ runScript file = do
       putStrLn err
       exitWith (ExitFailure 65)
     Right statements -> do
-      catch (eval statements) (\e -> do
+      env <- newEnvironment Nothing
+      catch (eval env statements) (\e -> do
         print (e :: RuntimeError)
         exitWith (ExitFailure 70))
 

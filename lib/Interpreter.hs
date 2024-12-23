@@ -3,6 +3,7 @@ import Ast
 import Token
 import Control.Exception
 import qualified Data.HashTable.IO as H
+import Text.ParserCombinators.ReadP (get, look)
 
 
 data LoxValue = LoxNil
@@ -83,16 +84,17 @@ type HashTable k v = H.BasicHashTable k v
 
 data Environment = Environment {
   envParent :: Maybe Environment,
-  envValues :: IO (HashTable String LoxValue)
+  envValues :: HashTable String LoxValue
 }
 
-newEnvironment :: Maybe Environment -> Environment
-newEnvironment parent = Environment parent H.new
+newEnvironment :: Maybe Environment -> IO Environment
+newEnvironment parent = do
+  Environment parent <$> H.new
 
 getVar ::Environment -> String -> IO (Maybe LoxValue)
 getVar env name = do
-  values <- envValues env
-  val <- H.lookup values name
+  val <- H.lookup (envValues env) name
+
   case val of
     Just _ -> return val
     Nothing -> case envParent env of
@@ -100,9 +102,7 @@ getVar env name = do
       Nothing -> return Nothing
 
 setVar :: Environment -> String -> LoxValue -> IO ()
-setVar env name value = do
-  values <- envValues env
-  H.insert values name value
+setVar env = H.insert (envValues env)
 
 hasVar :: Environment -> String -> IO Bool
 hasVar env name = do
@@ -119,6 +119,11 @@ evalExpression _ (Literal (TokenWithContext TrueToken _ _)) = return $ LoxBool T
 evalExpression _ (Literal (TokenWithContext FalseToken _ _)) = return $ LoxBool False
 evalExpression _ (Literal (TokenWithContext Nil _ _)) = return LoxNil
 
+evalExpression env (IdentifierExpr token@(TokenWithContext (Identifier name) _ _)) = do
+  value <- getVar env name
+  case value of
+    Just val -> return val
+    Nothing -> throw $ RuntimeError (Just token) ("Undefined variable '" ++ name ++ "'.")
 evalExpression env (Unary token expr) = evalExpression env expr >>= unaryOp token
 
 evalExpression env (Binary left token right) = do
@@ -129,8 +134,6 @@ evalExpression env (Binary left token right) = do
 evalExpression env (Grouping expr) = evalExpression env expr
 evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
 
-globalEnv :: Environment
-globalEnv = newEnvironment Nothing
 
 evalStatement :: Environment -> Statement -> IO ()
 evalStatement env (ExpressionStatement expr) = do
@@ -141,6 +144,17 @@ evalStatement env (PrintStatement expr) = do
   val <- evalExpression env expr
   print val
 
-eval:: [Statement] -> IO ()
-eval statements = do
-  mapM_ (evalStatement globalEnv) statements
+evalStatement env (Declaration (TokenWithContext (Identifier name) _ _) val) = do
+  case val of
+    Just expr -> do
+      value <- evalExpression env expr
+      setVar env name value
+    Nothing -> setVar env name LoxNil
+  return ()
+
+evalStatement _ _ = throw $ RuntimeError Nothing "Failed to evaluate statement"
+
+eval:: Environment -> [Statement] -> IO ()
+eval env statements = do
+  mapM_ (evalStatement env) statements
+
