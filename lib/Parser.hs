@@ -201,12 +201,18 @@ atLeastOneParser parser = do
 argumentListParser :: Parser ([Expression], TokenWithContext)
 argumentListParser = do
   tokenParser (== LeftParen)
-  expression <- expressionParser
-  expressions <- repeatParser $ do
-    tokenParser (== Comma)
-    expressionParser
+  arguments <- argumentsParser
   closing <- tokenParser' (== RightParen) "Expect ')' after arguments."
-  return (expression:expressions, closing)
+  return (arguments, closing)
+  where
+    argumentsParser = do
+      expression <- optional expressionParser
+      case expression of
+        Just expr -> do
+          tokenParser (== Comma)
+          expressions <- repeatParser expressionParser
+          return (expr:expressions)
+        Nothing -> return []
 
 callParser :: Parser Expression
 callParser = do

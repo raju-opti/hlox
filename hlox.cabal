@@ -53,6 +53,7 @@ common shared-properties
   build-depends: base ^>=4.17.2.1
                  , containers ^>= 0.6.7
                  , hashtables ^>= 1.4.1
+                 , time ^>= 1.14
   ghc-options:
     -Wall
 

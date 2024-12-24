@@ -4,7 +4,9 @@ import Token
 import Control.Exception
 import Control.Monad (when)
 import qualified Data.HashTable.IO as H
-import Text.ParserCombinators.ReadP (get, look)
+import Data.Time.Clock
+import Data.Time.Clock.POSIX
+import Data.Time
 import Data.HashTable.IO (new)
 
 
@@ -12,7 +14,12 @@ data LoxValue = LoxNil
               | LoxBool Bool
               | LoxNumber Double
               | LoxString String
-              deriving (Eq)
+              | LoxCallable Callable
+
+data Callable = Callable {
+  arity :: Int,
+  call :: [LoxValue] -> IO LoxValue
+}
 
 instance Show LoxValue where
   show LoxNil = "nil"
@@ -20,8 +27,14 @@ instance Show LoxValue where
   show (LoxBool False) = "false"
   show (LoxNumber n) = show n
   show (LoxString s) = s
+  show (LoxCallable _) = "<callable>"
 
-
+instance Eq LoxValue where
+  LoxNil == LoxNil = True
+  (LoxBool l) == (LoxBool r) = l == r
+  (LoxNumber l) == (LoxNumber r) = l == r
+  (LoxString l) == (LoxString r) = l == r
+  _ == _ = False
 
 data RuntimeError = RuntimeError (Maybe TokenWithContext) String
   deriving (Eq)
@@ -152,6 +165,17 @@ evalExpression env (Binary left token right) = do
   binaryOp token leftValue rightValue
 
 evalExpression env (Grouping expr) = evalExpression env expr
+
+evalExpression env (Call callee paren arguments) = do
+  calleeValue <- evalExpression env callee
+  case calleeValue of
+    LoxCallable (Callable arity call) -> do
+      when (length arguments /= arity) (throw $ RuntimeError Nothing "Expected number of arguments does not match.")
+      argumentValues <- mapM (evalExpression env) arguments
+      call argumentValues
+    _ -> throw $ RuntimeError Nothing "Can only call functions and classes."
+
+
 evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
 
 
@@ -189,7 +213,18 @@ evalStatement env stmt@(WhileStatement condition body) = do
   when (isTruthy conditionValue) (evalStatement env body >> evalStatement env stmt)
 
 evalStatement _ _ = throw $ RuntimeError Nothing "Failed to evaluate statement"
-  
+
 eval:: Environment -> [Statement] -> IO ()
 eval env statements = do
   mapM_ (evalStatement env) statements
+
+
+clock :: Callable
+clock = Callable 0 $ \_ -> do
+  LoxNumber . fromIntegral . floor . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds <$> getCurrentTime
+
+globalEnv :: IO Environment
+globalEnv = do
+  env <- newEnvironment Nothing
+  defineVar env "clock" (LoxCallable clock)
+  return env

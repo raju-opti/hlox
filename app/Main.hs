@@ -59,7 +59,7 @@ replEnv env = do
 
 repl:: IO ()
 repl = do
-  env <- newEnvironment Nothing
+  env <- globalEnv
   replEnv env
   -- putStr "λ> "
   -- line <- getLine
@@ -82,7 +82,7 @@ runScript file = do
       putStrLn err
       exitWith (ExitFailure 65)
     Right statements -> do
-      env <- newEnvironment Nothing
+      env <- globalEnv
       catch (eval env statements) (\e -> do
         print (e :: RuntimeError)
         exitWith (ExitFailure 70))
