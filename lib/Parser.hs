@@ -350,6 +350,14 @@ statementParser = expressionStatementParser
     <|> ifStatementParser
     <|> whileStatementParser
     <|> forStatementParser
+    <|> returnStatementParser
+
+returnStatementParser :: Parser Statement
+returnStatementParser = do
+  returnToken <- tokenParser (== Return)
+  value <- optional expressionParser
+  tokenParser' (== Semicolon) "Expect ';' after return value."
+  return $ ReturnStatement returnToken value
 
 expressionStatementParser :: Parser Statement
 expressionStatementParser = do

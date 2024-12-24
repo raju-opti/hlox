@@ -2,7 +2,7 @@ module Main where
 import System.Environment
 import System.IO
 import Token
-import Lexer 
+import Lexer
 import Parser
 import Interpreter
 import Data.Either
@@ -11,6 +11,7 @@ import Ast
 import Data.Bifunctor (Bifunctor(bimap))
 import System.Exit (exitWith, ExitCode (ExitFailure))
 import Control.Exception
+import Control.Monad
 
 scanAndParseExpression :: String -> Either String Expression
 scanAndParseExpression inp = do
@@ -54,7 +55,7 @@ replEnv env = do
   case result of
     Left err -> putStrLn err
     Right statements -> do
-      catch (eval env statements) (print :: RuntimeError -> IO ())
+      catch (void (eval env statements)) (print :: RuntimeError -> IO ())
   replEnv env
 
 repl:: IO ()
@@ -83,10 +84,7 @@ runScript file = do
       exitWith (ExitFailure 65)
     Right statements -> do
       env <- globalEnv
-      catch (eval env statements) (\e -> do
-        print (e :: RuntimeError)
-        exitWith (ExitFailure 70))
-
+      catch (void (eval env statements)) (print :: RuntimeError -> IO ())
 
 main :: IO ()
 main = do

@@ -1,3 +1,7 @@
+{-# LANGUAGE BlockArguments #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant lambda" #-}
+{-# HLINT ignore "Use lambda-case" #-}
 module Interpreter where
 import Ast
 import Token
@@ -8,6 +12,7 @@ import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Data.Time
 import Data.HashTable.IO (new)
+import Data.Maybe (fromMaybe)
 
 
 data LoxValue = LoxNil
@@ -179,14 +184,18 @@ evalExpression env (Call callee paren arguments) = do
 evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
 
 
-evalStatement :: Environment -> Statement -> IO ()
+newtype ReturnValue = ReturnValue LoxValue
+  deriving (Show, Eq)
+
+evalStatement :: Environment -> Statement -> IO (Maybe ReturnValue)
 evalStatement env (ExpressionStatement expr) = do
   evalExpression env expr
-  return ()
+  return Nothing
 
 evalStatement env (PrintStatement expr) = do
   val <- evalExpression env expr
   print val
+  return Nothing
 
 evalStatement env (VarDeclaration (TokenWithContext (Identifier name) _ _) val) = do
   case val of
@@ -194,38 +203,57 @@ evalStatement env (VarDeclaration (TokenWithContext (Identifier name) _ _) val) 
       value <- evalExpression env expr
       defineVar env name value
     Nothing -> defineVar env name LoxNil
-  return ()
+  return Nothing
 
 evalStatement env (Block statements) = do
   newEnv <- newEnvironment (Just env)
-  mapM_ (evalStatement newEnv) statements
+  eval newEnv statements
 
 
 evalStatement env (IfStatement condition thenBranch elseBranch) = do
   conditionValue <- evalExpression env condition
   if isTruthy conditionValue
     then evalStatement env thenBranch
-    else mapM_ (evalStatement env) elseBranch
+    else do
+      maybe (return Nothing) (evalStatement env) elseBranch
 
 
 evalStatement env stmt@(WhileStatement condition body) = do
   conditionValue <- evalExpression env condition
-  when (isTruthy conditionValue) (evalStatement env body >> evalStatement env stmt)
+  if isTruthy conditionValue
+    then do
+      result <- evalStatement env body
+      case result of
+        Just ret -> return (Just ret)
+        Nothing -> evalStatement env stmt
+    else return Nothing
 
 evalStatement env (FunDeclaration (TokenWithContext (Identifier name) _ _) params body) = do
-  let callable = Callable (length params) $ \args -> do
-        newEnv <- newEnvironment (Just env)
-        mapM_ (uncurry (defineVar newEnv)) (zip params args)
-        mapM_ (evalStatement newEnv) body
-        return LoxNil
-  defineVar env name (LoxCallable callable)
-  
+  let identifierName = \token -> case token of
+        TokenWithContext (Identifier n) _ _ -> n
+        _ -> ""
+      callable = Callable (length params) $ \args -> do
+          newEnv <- newEnvironment (Just env)
+          mapM_ (uncurry (defineVar newEnv)) (zip (fmap identifierName params) args)
+          value <- eval newEnv body
+          case value of
+            Just (ReturnValue val) -> return val
+            _ -> return LoxNil
+    in defineVar env name (LoxCallable callable) >> return Nothing
+
+evalStatement env (ReturnStatement _ expr) = do
+  val <- maybe (return LoxNil) (evalExpression env) expr
+  return $ Just (ReturnValue val)
+
 evalStatement _ _ = throw $ RuntimeError Nothing "Failed to evaluate statement"
 
-eval:: Environment -> [Statement] -> IO ()
-eval env statements = do
-  mapM_ (evalStatement env) statements
-
+eval:: Environment -> [Statement] -> IO (Maybe ReturnValue)
+eval _ [] = return Nothing
+eval env (statement:statements) = do
+  val <- evalStatement env statement
+  case val of
+    Nothing -> eval env statements
+    _ -> return val
 
 clock :: Callable
 clock = Callable 0 $ \_ -> do

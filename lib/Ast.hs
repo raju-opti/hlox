@@ -18,4 +18,5 @@ data Statement =
   | Block [Statement]
   | IfStatement Expression Statement (Maybe Statement)
   | WhileStatement Expression Statement
+  | ReturnStatement TokenWithContext (Maybe Expression)
   deriving (Show, Eq)
