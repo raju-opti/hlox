@@ -9,6 +9,7 @@ import Control.Applicative -- Otherwise you can't do the Applicative instance.
 import Ast
 import Text.ParserCombinators.ReadPrec (reset)
 import Data.Traversable (for)
+import GHC.Read (list)
 
 data ParserError = ParserError (Maybe TokenWithContext) String
   deriving (Eq)
@@ -198,9 +199,10 @@ atLeastOneParser parser = do
   as <- repeatParser parser
   return (a:as)
 
+
 argumentListParser :: Parser ([Expression], TokenWithContext)
 argumentListParser = do
-  tokenParser' (== LeftParen) "need left paren"
+  tokenParser (== LeftParen)
   arguments <- argumentsParser
   closing <- tokenParser' (== RightParen) "Expect ')' after arguments."
   return (arguments, closing)
@@ -261,16 +263,45 @@ isIdentifier :: Token -> Bool
 isIdentifier (Identifier _) = True
 isIdentifier _ = False
 
+parameterListParser :: String -> Parser [TokenWithContext]
+parameterListParser kind = do
+  tokenParser' (== LeftParen) $ "Expect '(' after " ++ kind ++ " name."
+  parameters <- paramParser
+  tokenParser' (== RightParen) "Expect ')' after arguments."
+  return parameters
+  where
+    paramParser = do
+      let paramParser = tokenParser' isIdentifier "Expect parameter name"
+      token <- optional paramParser
+      case token of
+        Just p ->
+          let subParser = repeatParser $ do
+                tokenParser (== Comma)
+                paramParser
+          in do
+            params <- subParser
+            return (p:params)
+        Nothing -> return []
 
-declarationParser :: Parser Statement
-declarationParser = statementParser <|> do
+funDeclarationParser :: String -> Parser Statement
+funDeclarationParser kind = do
+  tokenParser (== Fun)
+  name <- tokenParser' isIdentifier $ "Expect " ++ kind ++ " name"
+  parameters <- parameterListParser kind
+  FunDeclaration name parameters <$> blockedStatementsParser
+
+varDeclarationParser :: Parser Statement
+varDeclarationParser = do
   tokenParser (== Var)
   identifier <- tokenParser' isIdentifier "expect variable name"
   expression <- optional $ do
     tokenParser (== Equal)
     expressionParser
   tokenParser' (== Semicolon) "Expect ';' after variable declaration."
-  return $ Declaration identifier expression
+  return $ VarDeclaration identifier expression
+
+declarationParser :: Parser Statement
+declarationParser = statementParser <|> varDeclarationParser <|> funDeclarationParser "function"
 
 ifStatementParser :: Parser Statement
 ifStatementParser = do
@@ -334,8 +365,11 @@ printStatementParser = do
   return $ PrintStatement expression
 
 blockParser :: Parser Statement
-blockParser = do
+blockParser = Block <$> blockedStatementsParser
+
+blockedStatementsParser :: Parser [Statement]
+blockedStatementsParser = do
   tokenParser (== LeftBrace)
   statements <- repeatParser declarationParser
   tokenParser' (== RightBrace) "Expect '}' after block."
-  return $ Block statements
+  return statements

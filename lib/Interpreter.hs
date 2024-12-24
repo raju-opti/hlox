@@ -188,7 +188,7 @@ evalStatement env (PrintStatement expr) = do
   val <- evalExpression env expr
   print val
 
-evalStatement env (Declaration (TokenWithContext (Identifier name) _ _) val) = do
+evalStatement env (VarDeclaration (TokenWithContext (Identifier name) _ _) val) = do
   case val of
     Just expr -> do
       value <- evalExpression env expr
@@ -212,6 +212,14 @@ evalStatement env stmt@(WhileStatement condition body) = do
   conditionValue <- evalExpression env condition
   when (isTruthy conditionValue) (evalStatement env body >> evalStatement env stmt)
 
+evalStatement env (FunDeclaration (TokenWithContext (Identifier name) _ _) params body) = do
+  let callable = Callable (length params) $ \args -> do
+        newEnv <- newEnvironment (Just env)
+        mapM_ (uncurry (defineVar newEnv)) (zip params args)
+        mapM_ (evalStatement newEnv) body
+        return LoxNil
+  defineVar env name (LoxCallable callable)
+  
 evalStatement _ _ = throw $ RuntimeError Nothing "Failed to evaluate statement"
 
 eval:: Environment -> [Statement] -> IO ()

@@ -13,9 +13,9 @@ data Expression =
 data Statement =
   ExpressionStatement Expression
   | PrintStatement Expression
-  | Declaration TokenWithContext (Maybe Expression)
+  | VarDeclaration TokenWithContext (Maybe Expression)
+  | FunDeclaration TokenWithContext [TokenWithContext] [Statement]
   | Block [Statement]
   | IfStatement Expression Statement (Maybe Statement)
   | WhileStatement Expression Statement
-  -- | ForStatement (Maybe Statement) (Maybe Expression) (Maybe Expression) Statement
   deriving (Show, Eq)
