@@ -200,7 +200,7 @@ atLeastOneParser parser = do
 
 argumentListParser :: Parser ([Expression], TokenWithContext)
 argumentListParser = do
-  tokenParser (== LeftParen)
+  tokenParser' (== LeftParen) "need left paren"
   arguments <- argumentsParser
   closing <- tokenParser' (== RightParen) "Expect ')' after arguments."
   return (arguments, closing)
@@ -208,10 +208,13 @@ argumentListParser = do
     argumentsParser = do
       expression <- optional expressionParser
       case expression of
-        Just expr -> do
-          tokenParser (== Comma)
-          expressions <- repeatParser expressionParser
-          return (expr:expressions)
+        Just expr ->
+          let subParser = repeatParser $ do
+                tokenParser (== Comma)
+                expressionParser
+          in do
+            exprs <- subParser
+            return (expr:exprs)
         Nothing -> return []
 
 callParser :: Parser Expression
@@ -310,9 +313,9 @@ forStatementParser = do
     where valueOrSemicolon parser = (Just <$> parser) <|> (tokenParser (== Semicolon) >> return Nothing)
 
 statementParser :: Parser Statement
-statementParser = expressionStatementParser 
-    <|> printStatementParser 
-    <|> blockParser 
+statementParser = expressionStatementParser
+    <|> printStatementParser
+    <|> blockParser
     <|> ifStatementParser
     <|> whileStatementParser
     <|> forStatementParser

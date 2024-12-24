@@ -17,8 +17,8 @@ data LoxValue = LoxNil
               | LoxCallable Callable
 
 data Callable = Callable {
-  arity :: Int,
-  call :: [LoxValue] -> IO LoxValue
+  cArity :: Int,
+  cCall :: [LoxValue] -> IO LoxValue
 }
 
 instance Show LoxValue where
@@ -170,10 +170,10 @@ evalExpression env (Call callee paren arguments) = do
   calleeValue <- evalExpression env callee
   case calleeValue of
     LoxCallable (Callable arity call) -> do
-      when (length arguments /= arity) (throw $ RuntimeError Nothing "Expected number of arguments does not match.")
+      when (length arguments /= arity) (throw $ RuntimeError (Just paren) "Expected number of arguments does not match.")
       argumentValues <- mapM (evalExpression env) arguments
       call argumentValues
-    _ -> throw $ RuntimeError Nothing "Can only call functions and classes."
+    _ -> throw $ RuntimeError (Just paren) "Can only call functions and classes."
 
 
 evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
