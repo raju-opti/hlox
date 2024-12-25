@@ -13,11 +13,18 @@ data Expression =
   deriving (Show, Eq)
 
 type ResolvedExpression = (Expression, Map String Int)
+
+data AstFunction = AstFunction {
+  name :: TokenWithContext,
+  params :: [TokenWithContext],
+  body :: [Statement]
+} deriving (Show, Eq)
+
 data Statement =
   ExpressionStatement Expression
   | PrintStatement Expression
   | VarDeclaration TokenWithContext (Maybe Expression)
-  | FunDeclaration TokenWithContext [TokenWithContext] [Statement]
+  | FunDeclaration AstFunction
   | Block [Statement]
   | IfStatement Expression Statement (Maybe Statement)
   | WhileStatement Expression Statement

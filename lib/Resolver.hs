@@ -111,7 +111,7 @@ resolveStatement stmt@(VarDeclaration token@(TokenWithContext (Identifier name) 
       in (VarDeclaration token (Just er), (selfReferenceError <$> ee) ++ err, define name rs')
     Nothing -> (stmt, err, define name rs')
 
-resolveStatement (FunDeclaration token@(TokenWithContext (Identifier name) l c) params body) rs =
+resolveStatement (FunDeclaration (AstFunction token@(TokenWithContext (Identifier name) l c) params body)) rs =
   let (rs', msg) = declare name rs
       err = maybeError msg l c
       rs'' = define name rs'
@@ -122,7 +122,7 @@ resolveStatement (FunDeclaration token@(TokenWithContext (Identifier name) l c) 
                   in (define paramName s', err' ++ err)
 
       (resolvedBody, be, _) = resolve body rs'''
-  in (FunDeclaration token params resolvedBody, err ++ pe ++ be, rs'')
+  in (FunDeclaration (AstFunction token params resolvedBody), err ++ pe ++ be, rs'')
 
 resolveStatement (Block stmts) rs =
   let rs' = addScope rs

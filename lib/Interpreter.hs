@@ -236,7 +236,7 @@ evalStatement env stmt@(WhileStatement condition body) = do
         Nothing -> evalStatement env stmt
     else return Nothing
 
-evalStatement env (FunDeclaration (TokenWithContext (Identifier name) _ _) params body) = do
+evalStatement env (FunDeclaration (AstFunction (TokenWithContext (Identifier name) _ _) params body)) = do
   let identifierName = \token -> case token of
         TokenWithContext (Identifier n) _ _ -> n
         _ -> ""

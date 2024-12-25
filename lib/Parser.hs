@@ -10,6 +10,8 @@ import Ast
 import Text.ParserCombinators.ReadPrec (reset)
 import Data.Traversable (for)
 import GHC.Read (list)
+import Resolver (FunctionType(Function))
+import Ast (Statement(FunDeclaration))
 
 data ParserError = ParserError (Maybe TokenWithContext) String
   deriving (Eq)
@@ -282,12 +284,16 @@ parameterListParser kind = do
             return (p:params)
         Nothing -> return []
 
+functionParser :: String -> Parser AstFunction
+functionParser kind = do
+  name <- tokenParser' isIdentifier $ "Expect " ++ kind ++ " name"
+  parameters <- parameterListParser kind
+  AstFunction name parameters <$> blockedStatementsParser
+
 funDeclarationParser :: String -> Parser Statement
 funDeclarationParser kind = do
   tokenParser (== Fun)
-  name <- tokenParser' isIdentifier $ "Expect " ++ kind ++ " name"
-  parameters <- parameterListParser kind
-  FunDeclaration name parameters <$> blockedStatementsParser
+  FunDeclaration <$> functionParser kind
 
 varDeclarationParser :: Parser Statement
 varDeclarationParser = do
