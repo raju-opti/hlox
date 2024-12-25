@@ -95,7 +95,7 @@ assignmentParser = do
     Just _ -> do
       valueExpr <- assignmentParser
       case expression of
-        IdentifierExpr identifier -> return $ Assignment identifier valueExpr
+        IdentifierExpr _ _-> return $ Assignment expression valueExpr
         _ -> Parser (Left $ ParserError eqSign "Invalid assignment target",)
     Nothing -> return expression
 
@@ -124,7 +124,6 @@ leftAssociativeParser expParser operatorParser = let subParser = repeatParser $ 
                                                                     return (operator, expression)
                                                 in do
                                                   expression <- expParser
-                                                  return expression
                                                   foldl (\acc (op, expr) -> Binary acc op expr) expression <$> subParser
 
 orParser :: Parser Expression
@@ -243,7 +242,7 @@ primaryParser = literalParser
                     expr <- expressionParser
                     tokenParser (== RightParen)
                     return $ Grouping expr
-                  identifierParser = IdentifierExpr <$> tokenParser isIdentifier
+                  identifierParser = (`IdentifierExpr` Nothing) <$> tokenParser isIdentifier
 
 
 

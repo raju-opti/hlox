@@ -12,6 +12,7 @@ import Data.Bifunctor (Bifunctor(bimap))
 import System.Exit (exitWith, ExitCode (ExitFailure))
 import Control.Exception
 import Control.Monad
+import Resolver
 
 scanAndParseExpression :: String -> Either String Expression
 scanAndParseExpression inp = do
@@ -24,6 +25,16 @@ scanAndParseStatements inp = do
   tokens <- (first (unlines. fmap show) . scan') inp
   let result = parseProgram tokens
   first show result
+
+resolveStatements :: [Statement] -> Either String [Statement]
+resolveStatements statements = 
+  let (stmt, errTokens, _) = resolve statements []
+  in if null errTokens
+    then Right stmt
+    else Left (unlines (fmap errMsg errTokens))
+      where errMsg (TokenWithContext (Identifier name ) line column) = "Can't read local variable in its own initializer: " 
+              ++ name ++ " at line " ++ show line ++ " column " ++ show column
+
 
 -- run:: String -> IO ()
 -- run input = do
@@ -51,7 +62,7 @@ replEnv :: Environment -> IO ()
 replEnv env = do
   putStr "λ> "
   line <- getLine
-  let result = scanAndParseStatements line
+  let result = scanAndParseStatements line >>= resolveStatements
   case result of
     Left err -> putStrLn err
     Right statements -> do
@@ -77,7 +88,7 @@ repl = do
 runScript:: String -> IO ()
 runScript file = do
   contents <- readFile file
-  let result = scanAndParseStatements contents
+  let result = scanAndParseStatements contents >>= resolveStatements
   case result of
     Left err -> do
       putStrLn err

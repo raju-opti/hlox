@@ -111,27 +111,34 @@ newEnvironment :: Maybe Environment -> IO Environment
 newEnvironment parent = do
   Environment parent <$> H.new
 
-getVar ::Environment -> String -> IO (Maybe LoxValue)
-getVar env name = do
-  val <- H.lookup (envValues env) name
-
-  case val of
-    Just _ -> return val
-    Nothing -> case envParent env of
-      Just parent -> getVar parent name
+getVar ::Environment -> String -> Maybe Int -> IO (Maybe LoxValue)
+getVar env name (Just distance) = do
+  case distance of
+    0 -> H.lookup (envValues env) name
+    _ -> case envParent env of
+      Just parent -> getVar parent name (Just (distance - 1))
       Nothing -> return Nothing
 
+getVar env name Nothing = do
+  case envParent env of
+    Just parent -> getVar parent name Nothing
+    Nothing -> H.lookup (envValues env) name
+  
 defineVar :: Environment -> String -> LoxValue -> IO ()
 defineVar env = H.insert (envValues env)
 
-assignVar :: Environment -> String -> LoxValue -> IO ()
-assignVar env name value = do
-  existingValue <- H.lookup (envValues env) name
-  case existingValue of
-    Just _ -> H.insert (envValues env) name value
-    Nothing -> case envParent env of
-      Just parent -> assignVar parent name value
-      Nothing -> throw $ RuntimeError Nothing ("Undefined variable '" ++ name ++ "'.")
+assignVar :: Environment -> String -> Maybe Int -> LoxValue -> IO ()
+assignVar env name (Just distance) value = do
+  case distance of
+    0 -> H.insert (envValues env) name value
+    _ -> case envParent env of
+      Just parent -> assignVar parent name (Just (distance - 1)) value
+      Nothing -> return ()
+
+assignVar env name Nothing value = do
+  case envParent env of
+    Just parent -> assignVar parent name Nothing value
+    Nothing -> H.insert (envValues env) name value
 
 
 evalExpression :: Environment -> Expression -> IO LoxValue
@@ -141,16 +148,16 @@ evalExpression _ (Literal (TokenWithContext TrueToken _ _)) = return $ LoxBool T
 evalExpression _ (Literal (TokenWithContext FalseToken _ _)) = return $ LoxBool False
 evalExpression _ (Literal (TokenWithContext Nil _ _)) = return LoxNil
 
-evalExpression env (IdentifierExpr token@(TokenWithContext (Identifier name) _ _)) = do
-  value <- getVar env name
+evalExpression env (IdentifierExpr token@(TokenWithContext (Identifier name) _ _) d) = do
+  value <- getVar env name d
   case value of
     Just val -> return val
     Nothing -> throw $ RuntimeError (Just token) ("Undefined variable '" ++ name ++ "'.")
 evalExpression env (Unary token expr) = evalExpression env expr >>= unaryOp token
 
-evalExpression env (Assignment token@(TokenWithContext (Identifier name) _ _) expr) = do
+evalExpression env (Assignment (IdentifierExpr token@(TokenWithContext (Identifier name) _ _) d) expr) = do
   value <- evalExpression env expr
-  catch (assignVar env name value >> return value) (\(RuntimeError _ message) -> throw $ RuntimeError (Just token) message)
+  catch (assignVar env name d value>> return value) (\(RuntimeError _ message) -> throw $ RuntimeError (Just token) message)
 
 evalExpression env (Binary left (TokenWithContext And _ _) right) = do
   leftValue <- evalExpression env left

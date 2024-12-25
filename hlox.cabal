@@ -88,6 +88,7 @@ library
                      , Ast
                      , Parser
                      , Interpreter
+                     , Resolver
 
     -- Directories containing source files.
     hs-source-dirs:   lib
