@@ -28,12 +28,10 @@ scanAndParseStatements inp = do
 
 resolveStatements :: [Statement] -> Either String [Statement]
 resolveStatements statements = 
-  let (stmt, errTokens, _) = resolve statements []
-  in if null errTokens
+  let (stmt, err, _) = resolve statements (ResolutionState [] None)
+  in if null err
     then Right stmt
-    else Left (unlines (fmap errMsg errTokens))
-      where errMsg (TokenWithContext (Identifier name ) line column) = "Can't read local variable in its own initializer: " 
-              ++ name ++ " at line " ++ show line ++ " column " ++ show column
+    else Left (unlines (fmap show err))
 
 
 -- run:: String -> IO ()

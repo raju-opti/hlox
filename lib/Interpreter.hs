@@ -47,7 +47,8 @@ data RuntimeError = RuntimeError (Maybe TokenWithContext) String
 instance Exception RuntimeError
 
 instance Show RuntimeError where
-  show (RuntimeError (Just (TokenWithContext _ line column)) message) = "Runtime Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
+  show (RuntimeError (Just (TokenWithContext _ line column)) message) = 
+    "Runtime Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
   show (RuntimeError Nothing message) = "Runtime Error: " ++ message
 
 isTruthy :: LoxValue -> Bool
