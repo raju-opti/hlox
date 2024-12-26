@@ -15,9 +15,14 @@ data Expression =
 type ResolvedExpression = (Expression, Map String Int)
 
 data AstFunction = AstFunction {
-  name :: TokenWithContext,
-  params :: [TokenWithContext],
-  body :: [Statement]
+  fName :: TokenWithContext,
+  fParams :: [TokenWithContext],
+  fBody :: [Statement]
+} deriving (Show, Eq)
+
+data AstClass = AstClass {
+  cName :: TokenWithContext,
+  cMethods :: [AstFunction]
 } deriving (Show, Eq)
 
 data Statement =
@@ -25,6 +30,7 @@ data Statement =
   | PrintStatement Expression
   | VarDeclaration TokenWithContext (Maybe Expression)
   | FunDeclaration AstFunction
+  | ClassDeclaration AstClass
   | Block [Statement]
   | IfStatement Expression Statement (Maybe Statement)
   | WhileStatement Expression Statement

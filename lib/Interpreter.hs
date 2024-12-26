@@ -13,6 +13,7 @@ import Data.Time.Clock.POSIX
 import Data.Time
 import Data.HashTable.IO (new)
 import Data.Maybe (fromMaybe)
+import Parser (identifierName)
 
 
 data LoxValue = LoxNil
@@ -25,6 +26,20 @@ data Callable = Callable {
   cArity :: Int,
   cCall :: [LoxValue] -> IO LoxValue
 }
+
+data LoxFunction = LoxFunction {
+  fFunction :: AstFunction,
+  fClosure :: Environment
+}
+
+callableFunction :: LoxFunction -> Callable
+callableFunction (LoxFunction (AstFunction _ params body) cl) = Callable (length params) $ \args -> do
+          newEnv <- newEnvironment (Just cl)
+          mapM_ (uncurry (defineVar newEnv)) (zip (fmap tokenName params) args)
+          value <- eval newEnv body
+          case value of
+            Just (ReturnValue val) -> return val
+            _ -> return LoxNil
 
 instance Show LoxValue where
   show LoxNil = "nil"
@@ -50,6 +65,9 @@ instance Show RuntimeError where
   show (RuntimeError (Just (TokenWithContext _ line column)) message) = 
     "Runtime Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
   show (RuntimeError Nothing message) = "Runtime Error: " ++ message
+
+tokenName :: TokenWithContext -> String
+tokenName (TokenWithContext (Identifier name) _ _) = name
 
 isTruthy :: LoxValue -> Bool
 isTruthy LoxNil = False
@@ -236,18 +254,31 @@ evalStatement env stmt@(WhileStatement condition body) = do
         Nothing -> evalStatement env stmt
     else return Nothing
 
-evalStatement env (FunDeclaration (AstFunction (TokenWithContext (Identifier name) _ _) params body)) = do
-  let identifierName = \token -> case token of
-        TokenWithContext (Identifier n) _ _ -> n
-        _ -> ""
-      callable = Callable (length params) $ \args -> do
-          newEnv <- newEnvironment (Just env)
-          mapM_ (uncurry (defineVar newEnv)) (zip (fmap identifierName params) args)
-          value <- eval newEnv body
-          case value of
-            Just (ReturnValue val) -> return val
-            _ -> return LoxNil
-    in defineVar env name (LoxCallable callable) >> return Nothing
+evalStatement env (FunDeclaration fn@(AstFunction (TokenWithContext (Identifier name) _ _) _ _)) = do
+  let loxFunction = LoxFunction fn env
+      callable = callableFunction loxFunction
+  defineVar env name (LoxCallable callable)
+  return Nothing
+
+
+-- evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
+--   let identifierName = \token -> case token of
+--         TokenWithContext (Identifier n) _ _ -> n
+--         _ -> ""
+--       newEnv = newEnvironment (Just env)
+--       methodEnv = newEnvironment =<< newEnv
+--       defineMethod (AstFunction (TokenWithContext (Identifier name) _ _) params body) = do
+--         let callable = Callable (length params) $ \args -> do
+--             newMethodEnv <- newEnvironment =<< methodEnv
+--             mapM_ (uncurry (defineVar newMethodEnv)) (zip (fmap identifierName params) args)
+--             value <- eval newMethodEnv body
+--             case value of
+--               Just (ReturnValue val) -> return val
+--               _ -> return LoxNil
+--         defineVar =<< methodEnv name (LoxCallable callable)
+--   defineVar =<< newEnv name LoxNil
+--   mapM_ defineMethod methods
+--   return Nothing
 
 evalStatement env (ReturnStatement _ expr) = do
   val <- maybe (return LoxNil) (evalExpression env) expr

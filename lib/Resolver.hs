@@ -124,6 +124,12 @@ resolveStatement (FunDeclaration (AstFunction token@(TokenWithContext (Identifie
       (resolvedBody, be, _) = resolve body rs'''
   in (FunDeclaration (AstFunction token params resolvedBody), err ++ pe ++ be, rs'')
 
+resolveStatement (ClassDeclaration (AstClass token@(TokenWithContext (Identifier name) l c) methods)) rs =
+  let (rs', msg) = declare name rs
+      err = maybeError msg l c
+      rs'' = define name rs'
+  in (ClassDeclaration (AstClass token methods), err, rs'')
+
 resolveStatement (Block stmts) rs =
   let rs' = addScope rs
       (resolvedStmts, e, _) = resolve stmts rs'

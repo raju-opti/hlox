@@ -290,10 +290,19 @@ functionParser kind = do
   parameters <- parameterListParser kind
   AstFunction name parameters <$> blockedStatementsParser
 
-funDeclarationParser :: String -> Parser Statement
-funDeclarationParser kind = do
+funDeclarationParser :: Parser Statement
+funDeclarationParser = do
   tokenParser (== Fun)
-  FunDeclaration <$> functionParser kind
+  FunDeclaration <$> functionParser "function"
+
+classDeclarationParser :: Parser Statement
+classDeclarationParser = do
+  tokenParser (== Class)
+  name <- tokenParser' isIdentifier "Expect class name"
+  tokenParser (== LeftBrace)
+  methods <- repeatParser $ functionParser "method"
+  tokenParser (== RightBrace)
+  return $ ClassDeclaration $ AstClass name methods
 
 varDeclarationParser :: Parser Statement
 varDeclarationParser = do
@@ -306,7 +315,7 @@ varDeclarationParser = do
   return $ VarDeclaration identifier expression
 
 declarationParser :: Parser Statement
-declarationParser = statementParser <|> varDeclarationParser <|> funDeclarationParser "function"
+declarationParser = statementParser <|> varDeclarationParser <|> funDeclarationParser <|> classDeclarationParser
 
 ifStatementParser :: Parser Statement
 ifStatementParser = do
