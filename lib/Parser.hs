@@ -98,6 +98,7 @@ assignmentParser = do
       valueExpr <- assignmentParser
       case expression of
         IdentifierExpr _ _-> return $ Assignment expression valueExpr
+        Get obj name -> return $ Set obj name valueExpr
         _ -> Parser (Left $ ParserError eqSign "Invalid assignment target",)
     Nothing -> return expression
 

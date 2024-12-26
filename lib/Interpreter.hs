@@ -220,9 +220,26 @@ evalExpression env (Call callee paren arguments) = do
       call argumentValues
     _ -> throw $ RuntimeError (Just paren) "Can only call functions and classes."
 
+evalExpression env (Get obj name) = do
+  objValue <- evalExpression env obj
+  case objValue of
+    LoxInstance (ClassInstance _ fields) -> do
+      value <- H.lookup fields (tokenName name)
+      case value of
+        Just val -> return val
+        Nothing -> throw $ RuntimeError (Just name) "Undefined property."
+    _ -> throw $ RuntimeError (Just name) "Only instances have properties."
+
+evalExpression env (Set obj name value) = do
+  objValue <- evalExpression env obj
+  case objValue of
+    LoxInstance (ClassInstance _ fields) -> do
+      val <- evalExpression env value
+      H.insert fields (tokenName name) val
+      return val
+    _ -> throw $ RuntimeError (Just name) "Only instances have fields."
 
 evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
-
 
 newtype ReturnValue = ReturnValue LoxValue
   deriving (Show, Eq)

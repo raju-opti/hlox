@@ -11,6 +11,7 @@ data Expression =
   | Assignment Expression Expression
   | Call Expression TokenWithContext [Expression]
   | Get Expression TokenWithContext
+  | Set Expression TokenWithContext Expression
   deriving (Show, Eq)
 
 type ResolvedExpression = (Expression, Map String Int)

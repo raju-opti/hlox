@@ -73,6 +73,15 @@ resolveExpression (Call callee paren arguments) scope =
         ) ([], []) arguments
   in (Call cr paren ar, ce ++ ae)
 
+resolveExpression (Get obj name) scope =
+  let (r, oe) = resolveExpression obj scope
+  in (Get r name, oe)
+
+resolveExpression (Set obj name value) scope =
+  let (or, oe) = resolveExpression obj scope
+      (vr, ve) = resolveExpression value scope
+  in (Set or name vr, oe ++ ve)
+
 resolveExpression e _ = (e, [])
 
 declare :: String -> ResolutionState -> (ResolutionState, Maybe String)
