@@ -220,11 +220,21 @@ argumentListParser = do
             return (expr:exprs)
         Nothing -> return []
 
+eitherParser :: Parser a -> Parser b -> Parser (Either a b)
+eitherParser p1 p2 = (Left <$> p1) <|> (Right <$> p2)
+
 callParser :: Parser Expression
 callParser = do
       callee <- primaryParser
-      arguments <- repeatParser argumentListParser
-      return $ foldl (\acc (args, closing) -> Call acc closing args) callee arguments
+      ops <- repeatParser (eitherParser argumentListParser propertyAccessParser)
+      return $ foldl foldF callee ops
+      where propertyAccessParser = do
+              tokenParser (== Dot)
+              tokenParser' isIdentifier "Expect property name after '.'."
+            foldF acc arg = case arg of
+              Left (exprs, closing) -> Call acc closing exprs
+              Right prop -> Get acc prop
+
 
 primaryParser :: Parser Expression
 primaryParser = literalParser

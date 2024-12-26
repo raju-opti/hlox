@@ -10,6 +10,7 @@ data Expression =
   | IdentifierExpr TokenWithContext (Maybe Int)
   | Assignment Expression Expression
   | Call Expression TokenWithContext [Expression]
+  | Get Expression TokenWithContext
   deriving (Show, Eq)
 
 type ResolvedExpression = (Expression, Map String Int)

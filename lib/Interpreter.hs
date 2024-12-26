@@ -21,6 +21,7 @@ data LoxValue = LoxNil
               | LoxNumber Double
               | LoxString String
               | LoxCallable Callable
+              | LoxInstance ClassInstance
 
 data Callable = Callable {
   cArity :: Int,
@@ -40,6 +41,19 @@ callableFunction (LoxFunction (AstFunction _ params body) cl) = Callable (length
           case value of
             Just (ReturnValue val) -> return val
             _ -> return LoxNil
+
+data LoxClass = LoxClass {
+  cName :: String
+}
+
+data ClassInstance = ClassInstance {
+  iClass :: LoxClass,
+  iFields :: HashTable String LoxValue
+}
+
+callableClass :: LoxClass -> Callable
+callableClass c = Callable 0 $ \_ -> do
+  LoxInstance . ClassInstance c <$> H.new
 
 instance Show LoxValue where
   show LoxNil = "nil"
@@ -62,7 +76,7 @@ data RuntimeError = RuntimeError (Maybe TokenWithContext) String
 instance Exception RuntimeError
 
 instance Show RuntimeError where
-  show (RuntimeError (Just (TokenWithContext _ line column)) message) = 
+  show (RuntimeError (Just (TokenWithContext _ line column)) message) =
     "Runtime Error: " ++ message ++ " at line " ++ show line ++ " column " ++ show column
   show (RuntimeError Nothing message) = "Runtime Error: " ++ message
 
@@ -142,7 +156,7 @@ getVar env name Nothing = do
   case envParent env of
     Just parent -> getVar parent name Nothing
     Nothing -> H.lookup (envValues env) name
-  
+
 defineVar :: Environment -> String -> LoxValue -> IO ()
 defineVar env = H.insert (envValues env)
 
@@ -260,6 +274,11 @@ evalStatement env (FunDeclaration fn@(AstFunction (TokenWithContext (Identifier 
   defineVar env name (LoxCallable callable)
   return Nothing
 
+evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
+  let loxClass = LoxClass name
+      callable = callableClass loxClass
+  defineVar env name (LoxCallable callable)
+  return Nothing
 
 -- evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
 --   let identifierName = \token -> case token of
