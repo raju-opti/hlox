@@ -11,7 +11,7 @@ data SemanticError = SemanticError String Int Int
 instance Show SemanticError where
   show (SemanticError msg line column) = "Syntax Error: " ++ msg ++ " at line " ++ show line ++ " column " ++ show column
 
-data FunctionType = None | Function
+data FunctionType = None | Function | Method
   deriving (Eq, Show)
 
 data ResolutionState = ResolutionState {
@@ -40,47 +40,52 @@ resolveDistance' (scope:scopes) name distance = case Map.lookup name scope of
 resolveDistance :: Scope -> String -> Maybe (Int, Bool)
 resolveDistance scope name = resolveDistance' scope name 0
 
-resolveExpression :: Expression -> Scope -> (Expression, [TokenWithContext])
-resolveExpression (Binary left op right) scope =
-  let (lr, le) = resolveExpression left scope
-      (rr, re) = resolveExpression right scope
+resolveExpression :: Expression -> ResolutionState -> (Expression, [SemanticError])
+resolveExpression (Binary left op right) rs =
+  let (lr, le) = resolveExpression left rs
+      (rr, re) = resolveExpression right rs
   in (Binary lr op rr, le ++ re)
-resolveExpression (Unary op right) scope =
-  let (rr, re) = resolveExpression right scope
+resolveExpression (Unary op right) rs =
+  let (rr, re) = resolveExpression right rs
   in (Unary op rr, re)
 resolveExpression (Literal token) _ = (Literal token, [])
-resolveExpression (Grouping expr) scope =
-  let (er, ee) = resolveExpression expr scope
+resolveExpression (Grouping expr) rs =
+  let (er, ee) = resolveExpression expr rs
   in (Grouping er, ee)
 
-resolveExpression (IdentifierExpr token@(TokenWithContext (Identifier name) _ _) _) scope =
-  case resolveDistance scope name of
+resolveExpression (IdentifierExpr token@(TokenWithContext (Identifier name) _ _) _) rs =
+  case resolveDistance (rsScopes rs) name of
     Just (distance, b)
       | b -> (IdentifierExpr token (Just distance), [])
-      | otherwise -> (IdentifierExpr token Nothing, [token])
+      | otherwise -> (IdentifierExpr token Nothing, [selfReferenceError token])
     Nothing -> (IdentifierExpr token Nothing, [])
 
-resolveExpression (Assignment target expr) scope =
-  let (tr, te) = resolveExpression target scope
-      (er, ee) = resolveExpression expr scope
+resolveExpression (Assignment target expr) rs =
+  let (tr, te) = resolveExpression target rs
+      (er, ee) = resolveExpression expr rs
   in (Assignment tr er, te ++ ee)
 
-resolveExpression (Call callee paren arguments) scope =
-  let (cr, ce) = resolveExpression callee scope
+resolveExpression (Call callee paren arguments) rs =
+  let (cr, ce) = resolveExpression callee rs
       (ar, ae) = Prelude.foldr (\arg (acc, accE) ->
-          let (r, e) = resolveExpression arg scope
+          let (r, e) = resolveExpression arg rs
           in (r:acc, e ++ accE)
         ) ([], []) arguments
   in (Call cr paren ar, ce ++ ae)
 
-resolveExpression (Get obj name) scope =
-  let (r, oe) = resolveExpression obj scope
+resolveExpression (Get obj name) rs =
+  let (r, oe) = resolveExpression obj rs
   in (Get r name, oe)
 
-resolveExpression (Set obj name value) scope =
-  let (or, oe) = resolveExpression obj scope
-      (vr, ve) = resolveExpression value scope
-  in (Set or name vr, oe ++ ve)
+resolveExpression (Set obj name value) rs =
+  let (obr, obe) = resolveExpression obj rs
+      (vr, ve) = resolveExpression value rs
+  in (Set obr name vr, obe ++ ve)
+
+resolveExpression (ThisExpr token _) rs =
+  case resolveDistance (rsScopes rs) "this" of
+    Just (distance, _) -> (ThisExpr token distance, [])
+    Nothing -> (ThisExpr token 0, [])
 
 resolveExpression e _ = (e, [])
 
@@ -99,8 +104,8 @@ define name (ResolutionState (scope:scopes) cf) = ResolutionState (Map.insert na
 addScope :: ResolutionState -> ResolutionState
 addScope (ResolutionState scopes cf) = ResolutionState (Map.empty:scopes) cf
 
-newFunction :: ResolutionState -> ResolutionState
-newFunction (ResolutionState scopes _) = ResolutionState (Map.empty:scopes) Function
+newFunction :: FunctionType -> ResolutionState -> ResolutionState
+newFunction ft (ResolutionState scopes _) = ResolutionState (Map.empty:scopes) ft
 
 resolveStatement :: Statement -> ResolutionState -> (Statement, [SemanticError], ResolutionState)
 resolveStatement (ExpressionStatement expr) rs =
@@ -124,20 +129,21 @@ resolveStatement (FunDeclaration (AstFunction token@(TokenWithContext (Identifie
   let (rs', msg) = declare name rs
       err = maybeError msg l c
       rs'' = define name rs'
-      (rs''', pe) = Prelude.foldr defineParam (newFunction rs'', []) params
-          where defineParam (TokenWithContext (Identifier paramName) l c) (s, err) = 
-                  let (s', msg) = declare paramName s
-                      err' = maybeError msg l c
-                  in (define paramName s', err' ++ err)
+      (resolvedFn, fe, _) = resolveFunction Function (AstFunction token params body) rs''
 
-      (resolvedBody, be, _) = resolve body rs'''
-  in (FunDeclaration (AstFunction token params resolvedBody), err ++ pe ++ be, rs'')
+  in (FunDeclaration resolvedFn, err ++ fe, rs'')
 
 resolveStatement (ClassDeclaration (AstClass token@(TokenWithContext (Identifier name) l c) methods)) rs =
   let (rs', msg) = declare name rs
       err = maybeError msg l c
       rs'' = define name rs'
-  in (ClassDeclaration (AstClass token methods), err, rs'')
+      rs''' = define "this" $ addScope rs''
+      (resolvedMethods, me) = Prelude.foldr resolveMethod ([], []) methods
+          where resolveMethod m (acc, aerr) =
+                  let (resolvedMethod, e, _) = resolveFunction Method m rs'''
+                  in (resolvedMethod:acc, e ++ aerr)
+
+  in (ClassDeclaration (AstClass token resolvedMethods), err ++ me, rs'')
 
 resolveStatement (Block stmts) rs =
   let rs' = addScope rs
@@ -172,6 +178,16 @@ resolveStatement stmt@(ReturnStatement token expr) rs =
     
 resolveStatement stmt scope = (stmt, [], scope)
 
+resolveFunction :: FunctionType -> AstFunction -> ResolutionState -> (AstFunction, [SemanticError], ResolutionState)
+resolveFunction ft (AstFunction token params body) rs =
+  let (rs', pe) = Prelude.foldr defineParam (newFunction ft rs, []) params
+         where defineParam (TokenWithContext (Identifier paramName) l c) (s, err) = 
+                let (s', msg) = declare paramName s
+                    err' = maybeError msg l c
+                in (define paramName s', err' ++ err)
+
+      (resolvedBody, be, _) = resolve body rs'
+  in (AstFunction token params resolvedBody, pe ++ be, rs)
 
 resolve:: [Statement] -> ResolutionState -> ([Statement], [SemanticError], ResolutionState)
 resolve stmt scope = Prelude.foldl resolve' ([], [], scope) stmt

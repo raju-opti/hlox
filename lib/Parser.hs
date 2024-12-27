@@ -241,6 +241,7 @@ primaryParser :: Parser Expression
 primaryParser = literalParser
                 <|> groupingParser
                 <|> identifierParser
+                <|> thisExprParser
                 <|> Parser (\input -> (Left $ ParserError (listToMaybe input) "Expected expression", input))
                 where
                   literalParser = let parser =
@@ -250,13 +251,13 @@ primaryParser = literalParser
                                         <|> tokenParser isFalseToken
                                         <|> tokenParser isNilToken
                                     in Literal <$> parser
+                  thisExprParser = (`ThisExpr` 0) <$> tokenParser (== This)
                   groupingParser = do
                     tokenParser (== LeftParen)
                     expr <- expressionParser
                     tokenParser (== RightParen)
                     return $ Grouping expr
                   identifierParser = (`IdentifierExpr` Nothing) <$> tokenParser isIdentifier
-
 
 
 parseExpression :: [TokenWithContext] -> (Either ParserError Expression, [TokenWithContext])

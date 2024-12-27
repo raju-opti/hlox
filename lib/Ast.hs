@@ -12,9 +12,8 @@ data Expression =
   | Call Expression TokenWithContext [Expression]
   | Get Expression TokenWithContext
   | Set Expression TokenWithContext Expression
+  | ThisExpr TokenWithContext Int
   deriving (Show, Eq)
-
-type ResolvedExpression = (Expression, Map String Int)
 
 data AstFunction = AstFunction {
   fName :: TokenWithContext,

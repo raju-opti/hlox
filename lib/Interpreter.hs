@@ -14,6 +14,7 @@ import Data.Time
 import Data.HashTable.IO (new)
 import Data.Maybe (fromMaybe)
 import Parser (identifierName)
+import Data.Map as Map
 
 
 data LoxValue = LoxNil
@@ -43,7 +44,8 @@ callableFunction (LoxFunction (AstFunction _ params body) cl) = Callable (length
             _ -> return LoxNil
 
 data LoxClass = LoxClass {
-  cName :: String
+  lcName :: String,
+  lcMethods :: Map String Callable
 }
 
 data ClassInstance = ClassInstance {
@@ -223,11 +225,13 @@ evalExpression env (Call callee paren arguments) = do
 evalExpression env (Get obj name) = do
   objValue <- evalExpression env obj
   case objValue of
-    LoxInstance (ClassInstance _ fields) -> do
+    LoxInstance (ClassInstance cl fields) -> do
       value <- H.lookup fields (tokenName name)
       case value of
         Just val -> return val
-        Nothing -> throw $ RuntimeError (Just name) "Undefined property."
+        Nothing -> case Map.lookup (tokenName name) (lcMethods cl) of
+          Just fn -> return $ LoxCallable fn
+          Nothing -> throw $ RuntimeError (Just name) ("Undefined property '" ++ tokenName name ++ "'.")
     _ -> throw $ RuntimeError (Just name) "Only instances have properties."
 
 evalExpression env (Set obj name value) = do
@@ -292,7 +296,9 @@ evalStatement env (FunDeclaration fn@(AstFunction (TokenWithContext (Identifier 
   return Nothing
 
 evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
-  let loxClass = LoxClass name
+  let callableMethods = fmap makeFn methods
+        where makeFn fn@(AstFunction token _ _) = (tokenName token, callableFunction $ LoxFunction fn env)
+      loxClass = LoxClass name (Map.fromList callableMethods)
       callable = callableClass loxClass
   defineVar env name (LoxCallable callable)
   return Nothing
