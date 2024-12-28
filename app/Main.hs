@@ -28,7 +28,7 @@ scanAndParseStatements inp = do
 
 resolveStatements :: [Statement] -> Either String [Statement]
 resolveStatements statements = 
-  let (stmt, err, _) = resolve statements (ResolutionState [] None)
+  let (stmt, err, _) = resolve statements (ResolutionState [] NoneF NoneC)
   in if null err
     then Right stmt
     else Left (unlines (fmap show err))

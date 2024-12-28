@@ -13,7 +13,7 @@ import Data.Time.Clock.POSIX
 import Data.Time
 import Data.HashTable.IO (new)
 import Data.Maybe (fromMaybe)
-import Parser (identifierName)
+import Parser (identifierName, printStatementParser)
 import Data.Map as Map
 
 
@@ -43,9 +43,13 @@ callableFunction (LoxFunction (AstFunction _ params body) cl) = Callable (length
             Just (ReturnValue val) -> return val
             _ -> return LoxNil
 
+-- bindThis :: LoxFunction -> LoxValue -> IO LoxFunction
+-- bindThis (LoxFunction fn cl) this = do
+--   newEnv = 
+
 data LoxClass = LoxClass {
   lcName :: String,
-  lcMethods :: Map String Callable
+  lcMethods :: Map String LoxFunction
 }
 
 data ClassInstance = ClassInstance {
@@ -53,9 +57,22 @@ data ClassInstance = ClassInstance {
   iFields :: HashTable String LoxValue
 }
 
+updateClosue:: HashTable String LoxValue -> LoxFunction -> LoxFunction
+updateClosue h (LoxFunction fn cl) = LoxFunction fn (Environment (Just cl) h)
+
+instantiate :: LoxClass -> IO LoxValue
+instantiate cls = do
+  fields <- H.new
+  newEnvMap <- H.new
+  let this = LoxInstance (ClassInstance cls' fields)
+        where cls' = cls { lcMethods = Map.map (updateClosue newEnvMap) (lcMethods cls) }
+  H.insert newEnvMap "this" this
+  return this
+
+
 callableClass :: LoxClass -> Callable
 callableClass c = Callable 0 $ \_ -> do
-  LoxInstance . ClassInstance c <$> H.new
+  instantiate c
 
 instance Show LoxValue where
   show LoxNil = "nil"
@@ -230,7 +247,7 @@ evalExpression env (Get obj name) = do
       case value of
         Just val -> return val
         Nothing -> case Map.lookup (tokenName name) (lcMethods cl) of
-          Just fn -> return $ LoxCallable fn
+          Just fn -> return $ LoxCallable (callableFunction fn)
           Nothing -> throw $ RuntimeError (Just name) ("Undefined property '" ++ tokenName name ++ "'.")
     _ -> throw $ RuntimeError (Just name) "Only instances have properties."
 
@@ -242,6 +259,11 @@ evalExpression env (Set obj name value) = do
       H.insert fields (tokenName name) val
       return val
     _ -> throw $ RuntimeError (Just name) "Only instances have fields."
+
+evalExpression env (ThisExpr _ d) = do
+  value <- getVar env "this" (Just d)
+  case value of
+    Just val -> return val
 
 evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
 
@@ -296,9 +318,9 @@ evalStatement env (FunDeclaration fn@(AstFunction (TokenWithContext (Identifier 
   return Nothing
 
 evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
-  let callableMethods = fmap makeFn methods
-        where makeFn fn@(AstFunction token _ _) = (tokenName token, callableFunction $ LoxFunction fn env)
-      loxClass = LoxClass name (Map.fromList callableMethods)
+  let fnMethods = fmap makeFn methods
+        where makeFn fn@(AstFunction token _ _) = (tokenName token, LoxFunction fn env)
+      loxClass = LoxClass name (Map.fromList fnMethods)
       callable = callableClass loxClass
   defineVar env name (LoxCallable callable)
   return Nothing
