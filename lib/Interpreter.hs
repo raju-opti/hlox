@@ -22,6 +22,8 @@ data LoxValue = LoxNil
               | LoxNumber Double
               | LoxString String
               | LoxCallable Callable
+              | LoxFunction RtFunction
+              | LoxClass RtClass
               | LoxInstance ClassInstance
 
 data Callable = Callable {
@@ -29,50 +31,72 @@ data Callable = Callable {
   cCall :: [LoxValue] -> IO LoxValue
 }
 
-data LoxFunction = LoxFunction {
+data RtFunction = RtFunction {
   fFunction :: AstFunction,
-  fClosure :: Environment
+  fClosure :: Environment,
+  fIsInitializer :: Bool
 }
 
-callableFunction :: LoxFunction -> Callable
-callableFunction (LoxFunction (AstFunction _ params body) cl) = Callable (length params) $ \args -> do
+funArity :: RtFunction -> Int
+funArity (RtFunction (AstFunction _ params _) _ _) = length params
+
+callableFunction :: RtFunction -> Callable
+callableFunction (RtFunction (AstFunction _ params body) cl isInit) = Callable (length params) $ \args -> do
           newEnv <- newEnvironment (Just cl)
           mapM_ (uncurry (defineVar newEnv)) (zip (fmap tokenName params) args)
           value <- eval newEnv body
-          case value of
+          if isInit
+          then fromMaybe LoxNil <$> getVar cl "this" (Just 0) 
+          else 
+            case value of
             Just (ReturnValue val) -> return val
             _ -> return LoxNil
 
--- bindThis :: LoxFunction -> LoxValue -> IO LoxFunction
--- bindThis (LoxFunction fn cl) this = do
---   newEnv = 
-
-data LoxClass = LoxClass {
+data RtClass = RtClass {
   lcName :: String,
-  lcMethods :: Map String LoxFunction
+  lcMethods :: Map String RtFunction
 }
 
+classArity:: RtClass -> Int
+classArity cls = maybe 0 funArity (getMethod "init" cls)
+
 data ClassInstance = ClassInstance {
-  iClass :: LoxClass,
+  iClass :: RtClass,
   iFields :: HashTable String LoxValue
 }
 
-updateClosue:: HashTable String LoxValue -> LoxFunction -> LoxFunction
-updateClosue h (LoxFunction fn cl) = LoxFunction fn (Environment (Just cl) h)
 
-instantiate :: LoxClass -> IO LoxValue
-instantiate cls = do
-  fields <- H.new
-  newEnvMap <- H.new
-  let this = LoxInstance (ClassInstance cls' fields)
-        where cls' = cls { lcMethods = Map.map (updateClosue newEnvMap) (lcMethods cls) }
-  H.insert newEnvMap "this" this
-  return this
+bind:: LoxValue -> RtFunction -> IO RtFunction
+bind ins (RtFunction (AstFunction name params body) cl isInit) = do
+  newEnv <- newEnvironment (Just cl)
+  H.insert (envValues newEnv) "this" ins
+  return $ RtFunction (AstFunction name params body) newEnv isInit
 
+instantiate :: RtClass -> IO LoxValue
+instantiate cls = LoxInstance . ClassInstance cls <$> H.new
 
-callableClass :: LoxClass -> Callable
-callableClass c = Callable 0 $ \_ -> do
-  instantiate c
+getLoxInstance :: LoxValue -> ClassInstance
+getLoxInstance (LoxInstance ins) = ins
+
+getMethod:: String -> RtClass -> Maybe RtFunction
+getMethod name cls = Map.lookup name (lcMethods cls)
+
+callableClass :: RtClass -> Callable
+callableClass c = Callable (classArity c) $ \args -> do
+  ins <- instantiate c
+  let initMethod = getMethod "init" c
+  case initMethod of
+    Just fn -> do
+      call <- callableFunction <$> bind ins fn
+      cCall call args
+      return ins
+    _ -> return ins
+
+callable:: LoxValue -> Maybe Callable
+callable (LoxCallable c) = Just c
+callable (LoxFunction fn) = Just $ callableFunction fn
+callable (LoxClass c) = Just $ callableClass c
+callable _ = Nothing
 
 instance Show LoxValue where
   show LoxNil = "nil"
@@ -80,6 +104,9 @@ instance Show LoxValue where
   show (LoxBool False) = "false"
   show (LoxNumber n) = show n
   show (LoxString s) = s
+  show (LoxFunction (RtFunction (AstFunction (TokenWithContext (Identifier name) _ _) _ _) _ _)) = "<fn " ++ name ++ ">"
+  show (LoxClass (RtClass name _) ) = "<class " ++ name ++ ">"
+  show (LoxInstance (ClassInstance (RtClass name _) _)) = "<instance " ++ name ++ ">"
   show (LoxCallable _) = "<callable>"
 
 instance Eq LoxValue where
@@ -232,8 +259,9 @@ evalExpression env (Grouping expr) = evalExpression env expr
 
 evalExpression env (Call callee paren arguments) = do
   calleeValue <- evalExpression env callee
-  case calleeValue of
-    LoxCallable (Callable arity call) -> do
+  let callableValue = callable calleeValue
+  case callableValue of
+    Just (Callable arity call) -> do
       when (length arguments /= arity) (throw $ RuntimeError (Just paren) "Expected number of arguments does not match.")
       argumentValues <- mapM (evalExpression env) arguments
       call argumentValues
@@ -246,8 +274,10 @@ evalExpression env (Get obj name) = do
       value <- H.lookup fields (tokenName name)
       case value of
         Just val -> return val
-        Nothing -> case Map.lookup (tokenName name) (lcMethods cl) of
-          Just fn -> return $ LoxCallable (callableFunction fn)
+        Nothing -> case getMethod (tokenName name) cl of
+          Just fn -> do
+            boundFn <- bind objValue fn
+            return $ LoxFunction boundFn
           Nothing -> throw $ RuntimeError (Just name) ("Undefined property '" ++ tokenName name ++ "'.")
     _ -> throw $ RuntimeError (Just name) "Only instances have properties."
 
@@ -312,37 +342,16 @@ evalStatement env stmt@(WhileStatement condition body) = do
     else return Nothing
 
 evalStatement env (FunDeclaration fn@(AstFunction (TokenWithContext (Identifier name) _ _) _ _)) = do
-  let loxFunction = LoxFunction fn env
-      callable = callableFunction loxFunction
-  defineVar env name (LoxCallable callable)
+  let loxFunction = LoxFunction $ RtFunction fn env False
+  defineVar env name loxFunction
   return Nothing
 
 evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
   let fnMethods = fmap makeFn methods
-        where makeFn fn@(AstFunction token _ _) = (tokenName token, LoxFunction fn env)
-      loxClass = LoxClass name (Map.fromList fnMethods)
-      callable = callableClass loxClass
-  defineVar env name (LoxCallable callable)
+        where makeFn fn@(AstFunction token _ _) = (tokenName token, RtFunction fn env (tokenName token == "init"))
+      loxClass = LoxClass $ RtClass name (Map.fromList fnMethods)
+  defineVar env name loxClass
   return Nothing
-
--- evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
---   let identifierName = \token -> case token of
---         TokenWithContext (Identifier n) _ _ -> n
---         _ -> ""
---       newEnv = newEnvironment (Just env)
---       methodEnv = newEnvironment =<< newEnv
---       defineMethod (AstFunction (TokenWithContext (Identifier name) _ _) params body) = do
---         let callable = Callable (length params) $ \args -> do
---             newMethodEnv <- newEnvironment =<< methodEnv
---             mapM_ (uncurry (defineVar newMethodEnv)) (zip (fmap identifierName params) args)
---             value <- eval newMethodEnv body
---             case value of
---               Just (ReturnValue val) -> return val
---               _ -> return LoxNil
---         defineVar =<< methodEnv name (LoxCallable callable)
---   defineVar =<< newEnv name LoxNil
---   mapM_ defineMethod methods
---   return Nothing
 
 evalStatement env (ReturnStatement _ expr) = do
   val <- maybe (return LoxNil) (evalExpression env) expr
