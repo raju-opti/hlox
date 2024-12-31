@@ -13,6 +13,7 @@ data Expression =
   | Get Expression TokenWithContext
   | Set Expression TokenWithContext Expression
   | ThisExpr TokenWithContext Int
+  | SuperExpr TokenWithContext TokenWithContext Int
   deriving (Show, Eq)
 
 data AstFunction = AstFunction {
@@ -23,7 +24,8 @@ data AstFunction = AstFunction {
 
 data AstClass = AstClass {
   cName :: TokenWithContext,
-  cMethods :: [AstFunction]
+  cMethods :: [AstFunction],
+  cSuperclass :: Maybe Expression
 } deriving (Show, Eq)
 
 data Statement =

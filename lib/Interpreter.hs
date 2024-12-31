@@ -15,6 +15,7 @@ import Data.HashTable.IO (new)
 import Data.Maybe (fromMaybe)
 import Parser (identifierName, printStatementParser)
 import Data.Map as Map
+import Resolver (define)
 
 
 data LoxValue = LoxNil
@@ -54,7 +55,8 @@ callableFunction (RtFunction (AstFunction _ params body) cl isInit) = Callable (
 
 data RtClass = RtClass {
   lcName :: String,
-  lcMethods :: Map String RtFunction
+  lcMethods :: Map String RtFunction,
+  lcSuperclass :: Maybe RtClass
 }
 
 classArity:: RtClass -> Int
@@ -79,7 +81,11 @@ getLoxInstance :: LoxValue -> ClassInstance
 getLoxInstance (LoxInstance ins) = ins
 
 getMethod:: String -> RtClass -> Maybe RtFunction
-getMethod name cls = Map.lookup name (lcMethods cls)
+getMethod name cls = case Map.lookup name (lcMethods cls) of
+  Just fn -> Just fn
+  Nothing -> case lcSuperclass cls of
+    Just super -> getMethod name super
+    Nothing -> Nothing
 
 callableClass :: RtClass -> Callable
 callableClass c = Callable (classArity c) $ \args -> do
@@ -105,8 +111,8 @@ instance Show LoxValue where
   show (LoxNumber n) = show n
   show (LoxString s) = s
   show (LoxFunction (RtFunction (AstFunction (TokenWithContext (Identifier name) _ _) _ _) _ _)) = "<fn " ++ name ++ ">"
-  show (LoxClass (RtClass name _) ) = "<class " ++ name ++ ">"
-  show (LoxInstance (ClassInstance (RtClass name _) _)) = "<instance " ++ name ++ ">"
+  show (LoxClass (RtClass name _ _) ) = "<class " ++ name ++ ">"
+  show (LoxInstance (ClassInstance (RtClass name _ _) _)) = "<instance " ++ name ++ ">"
   show (LoxCallable _) = "<callable>"
 
 instance Eq LoxValue where
@@ -295,6 +301,17 @@ evalExpression env (ThisExpr _ d) = do
   case value of
     Just val -> return val
 
+evalExpression env (SuperExpr _ method d) = do
+  superclass <- getVar env "super" (Just d)
+  case superclass of
+    Just (LoxClass cl) -> do
+      let methodName = tokenName method
+      methodFn <- maybe (throw $ RuntimeError Nothing ("Undefined method '" ++ methodName ++ "'.")) return (getMethod methodName cl)
+      thisValue <- getVar env "this" (Just (d - 1)) >>= maybe (return LoxNil) return
+      boundFn <- bind thisValue methodFn
+      return $ LoxFunction boundFn
+    _ -> throw $ RuntimeError Nothing "Failed to evaluate super expression."
+
 evalExpression _ _ = throw $ RuntimeError Nothing "Failed to evaluate expression"
 
 newtype ReturnValue = ReturnValue LoxValue
@@ -346,11 +363,29 @@ evalStatement env (FunDeclaration fn@(AstFunction (TokenWithContext (Identifier 
   defineVar env name loxFunction
   return Nothing
 
-evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods)) = do
-  let fnMethods = fmap makeFn methods
-        where makeFn fn@(AstFunction token _ _) = (tokenName token, RtFunction fn env (tokenName token == "init"))
-      loxClass = LoxClass $ RtClass name (Map.fromList fnMethods)
-  defineVar env name loxClass
+evalStatement env (ClassDeclaration (AstClass (TokenWithContext (Identifier name) _ _) methods superclass)) = do
+  defineVar env name LoxNil
+
+  let fnMethods cEnv = fmap makeFn methods
+        where makeFn fn@(AstFunction token _ _) = (tokenName token, RtFunction fn cEnv (tokenName token == "init"))
+
+  loxClass <- case superclass of
+    Just expr -> do
+      superclassValue <- evalExpression env expr
+      case superclassValue of
+        LoxClass superRtClass -> do
+          newHmap <- H.new
+          let newEnv = Environment (Just env) newHmap
+          defineVar newEnv "super" superclassValue
+          let met = fnMethods newEnv
+          return $ RtClass name (Map.fromList met) (Just superRtClass)
+        _ -> throw $ RuntimeError Nothing "Superclass must be a class."
+    Nothing -> do
+      let met = fnMethods env
+      return $ RtClass name (Map.fromList met) Nothing
+        
+
+  assignVar env name (Just 0) (LoxClass loxClass)
   return Nothing
 
 evalStatement env (ReturnStatement _ expr) = do

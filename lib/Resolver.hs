@@ -3,6 +3,7 @@ import Ast
 import Token
 import Data.Map as Map
 import Data.HashTable.Class (HashTable(new))
+import Data.Maybe (fromMaybe)
 
 type Scope = [Map String Bool]
 
@@ -18,7 +19,7 @@ instance Show SemanticError where
 data FunctionType = NoneF | Function | Method
   deriving (Eq, Show)
 
-data ClassType = NoneC | ClassC
+data ClassType = NoneC | ClassC | SubclassC
   deriving (Eq, Show)
 
 data ResolutionState = ResolutionState {
@@ -97,6 +98,14 @@ resolveExpression (ThisExpr token _) rs =
     Just (distance, _) -> (ThisExpr token distance, [])
     Nothing -> (ThisExpr token 0, [])
 
+resolveExpression expr@(SuperExpr token method _) rs =
+  case rsClassType rs of
+    SubclassC -> case resolveDistance (rsScopes rs) "super" of
+      Just (distance, _) -> (SuperExpr token method distance, [])
+      Nothing -> (SuperExpr token method 0, [])
+    NoneC -> (expr, [semanticError token "Can't use 'super' outside of a class."])
+    ClassC -> (expr, [semanticError token "Can't use 'super' in a class with no superclass."])
+
 resolveExpression e _ = (e, [])
 
 declare :: String -> ResolutionState -> (ResolutionState, Maybe String)
@@ -118,7 +127,7 @@ newFunction :: FunctionType -> ResolutionState -> ResolutionState
 newFunction ft rs@(ResolutionState{rsScopes=scopes}) = rs { rsScopes = Map.empty : scopes, rsFunctionType = ft }
 
 newClass :: ClassType -> ResolutionState -> ResolutionState
-newClass ct rs@(ResolutionState{rsScopes=scopes}) = 
+newClass ct rs@(ResolutionState{rsScopes=scopes}) =
   let newScope = Map.fromList [("this", True)]
   in rs { rsScopes = newScope : scopes, rsClassType = ct }
 
@@ -148,17 +157,29 @@ resolveStatement (FunDeclaration (AstFunction token@(TokenWithContext (Identifie
 
   in (FunDeclaration resolvedFn, err ++ fe, rs'')
 
-resolveStatement (ClassDeclaration (AstClass token@(TokenWithContext (Identifier name) l c) methods)) rs =
+resolveStatement (ClassDeclaration (AstClass token@(TokenWithContext (Identifier name) l c) methods superclass)) rs =
   let (rs', msg) = declare name rs
       err = maybeError msg l c
+      (superR, superErr) = maybe (Nothing, []) resolveSuperclass superclass
+         where resolveSuperclass s = let (r, e) = resolveExpression s rs'
+                in (Just r, e)
+
+      selfInheritErr = case superclass of
+        Just (IdentifierExpr (TokenWithContext (Identifier superName) _ _) _)
+          | name == superName -> [semanticError token "A class can't inherit from itself."]
+        _ -> []
+
       rs'' = define name rs'
-      rs''' = newClass ClassC rs''
+      rs''' = case superclass of
+        Just _ -> newClass SubclassC . define "super" . addScope $ rs''
+        _ -> newClass ClassC rs''
+  
       (resolvedMethods, me) = Prelude.foldr resolveMethod ([], []) methods
           where resolveMethod m (acc, aerr) =
                   let (resolvedMethod, e, _) = resolveFunction Method m rs'''
                   in (resolvedMethod:acc, e ++ aerr)
 
-  in (ClassDeclaration (AstClass token resolvedMethods), err ++ me, rs'')
+  in (ClassDeclaration (AstClass token resolvedMethods superR), err ++ superErr ++ selfInheritErr ++ me, rs'')
 
 resolveStatement (Block stmts) rs =
   let rs' = addScope rs

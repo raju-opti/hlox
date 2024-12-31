@@ -242,6 +242,7 @@ primaryParser = literalParser
                 <|> groupingParser
                 <|> identifierParser
                 <|> thisExprParser
+                <|> superExprParser
                 <|> Parser (\input -> (Left $ ParserError (listToMaybe input) "Expected expression", input))
                 where
                   literalParser = let parser =
@@ -252,6 +253,11 @@ primaryParser = literalParser
                                         <|> tokenParser isNilToken
                                     in Literal <$> parser
                   thisExprParser = (`ThisExpr` 0) <$> tokenParser (== This)
+                  superExprParser = do
+                    tokenParser (== Super)
+                    superToken <- tokenParser' (== Dot) "Expect '.' after 'super'."
+                    method <- tokenParser' isIdentifier "Expect superclass method name"
+                    return $ SuperExpr superToken method 0
                   groupingParser = do
                     tokenParser (== LeftParen)
                     expr <- expressionParser
@@ -311,10 +317,14 @@ classDeclarationParser :: Parser Statement
 classDeclarationParser = do
   tokenParser (== Class)
   name <- tokenParser' isIdentifier "Expect class name"
+  superclass <- optional $ do
+    tokenParser (== Less)
+    token <- tokenParser' isIdentifier "Expect superclass name."
+    return $ IdentifierExpr token Nothing
   tokenParser (== LeftBrace)
   methods <- repeatParser $ functionParser "method"
   tokenParser (== RightBrace)
-  return $ ClassDeclaration $ AstClass name methods
+  return $ ClassDeclaration $ AstClass name methods superclass
 
 varDeclarationParser :: Parser Statement
 varDeclarationParser = do
